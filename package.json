@@ -1,19 +1,22 @@
 {
-  "name": "solidity-template",
+  "name": "contracts-exchange-v1",
   "version": "1.0.0",
-  "description": "Solidity smart contracts template ",
+  "description": "LooksRare exchange smart contracts (v1)",
   "main": "index.js",
   "author": "LooksRare",
   "license": "MIT",
-  "private": true,
+  "private": false,
   "keywords": [
     "looksrare"
   ],
+  "engines": {
+    "node": ">=8.3.0"
+  },
   "homepage": "https://looksrare.org/",
-  "bugs": "https://github.com/LooksRare/solidity-template/issues",
+  "bugs": "https://github.com/LooksRare/contracts-exchange-v1/issues",
   "repository": {
     "type": "git",
-    "url": "https://github.com/LooksRare/solidity-template.git"
+    "url": "https://github.com/LooksRare/contracts-exchange-v1.git"
   },
   "scripts": {
     "compile": "hardhat compile",
@@ -61,5 +64,8 @@
     "ts-node": "^10.1.0",
     "typechain": "^5.1.2",
     "typescript": "^4.5.2"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "4.4.2"
   }
 }
