@@ -1,5 +1,5 @@
 import { assert, expect } from "chai";
-import { BigNumber, constants, Contract, Signer, utils } from "ethers";
+import { BigNumber, constants, Contract, utils } from "ethers";
 import { MerkleTree } from "merkletreejs";
 /* eslint-disable node/no-extraneous-import */
 import { keccak256 } from "js-sha3";
