@@ -1,5 +1,5 @@
 import { assert, expect } from "chai";
-import { BigNumber, constants, Contract, utils } from "ethers";
+import { BigNumber, constants, Contract, Signer, utils } from "ethers";
 import { MerkleTree } from "merkletreejs";
 /* eslint-disable node/no-extraneous-import */
 import { keccak256 } from "js-sha3";
@@ -10,6 +10,7 @@ import { increaseTo } from "./helpers/block-traveller";
 import { MakerOrderWithSignature, TakerOrder } from "./helpers/order-types";
 import { createMakerOrder, createTakerOrder } from "./helpers/order-helper";
 import { computeDomainSeparator, computeOrderHash } from "./helpers/signature-helper";
+import { setUp } from "./test-setup";
 
 const { defaultAbiCoder, parseEther } = utils;
 
@@ -53,127 +54,32 @@ describe("LooksRare Exchange", () => {
   beforeEach(async () => {
     accounts = await ethers.getSigners();
     admin = accounts[0];
-    royaltyCollector = accounts[15];
     feeRecipient = accounts[19];
+    royaltyCollector = accounts[15];
     standardProtocolFee = BigNumber.from("200");
     royaltyFeeLimit = BigNumber.from("9500"); // 95%
-
-    // Deploy Mock USDT, WETH, Mock ERC721, Mock ERC1155
-    const WETH = await ethers.getContractFactory("WETH");
-    weth = await WETH.deploy();
-    await weth.deployed();
-
-    const MockERC721 = await ethers.getContractFactory("MockERC721");
-    mockERC721 = await MockERC721.deploy("Mock ERC721", "MERC721");
-    await mockERC721.deployed();
-
-    const MockERC1155 = await ethers.getContractFactory("MockERC1155");
-    mockERC1155 = await MockERC1155.deploy("uri/");
-    await mockERC1155.deployed();
-
-    const MockERC20 = await ethers.getContractFactory("MockERC20");
-    mockUSDT = await MockERC20.deploy("USD Tether", "USDT");
-    await mockUSDT.deployed();
-
-    const MockERC721WithRoyalty = await ethers.getContractFactory("MockERC721WithRoyalty");
-    mockERC721WithRoyalty = await MockERC721WithRoyalty.connect(royaltyCollector).deploy(
-      "Mock Royalty ERC721",
-      "MRC721",
-      "200" // 2% royalty fee
-    );
-    await mockERC721WithRoyalty.deployed();
-
-    // Deploy Currency Manager and add WETH to supported currencies
-    const CurrencyManager = await ethers.getContractFactory("CurrencyManager");
-    currencyManager = await CurrencyManager.deploy();
-    await currencyManager.deployed();
-    await currencyManager.connect(admin).addCurrency(weth.address);
-
-    // Deploy Execution Manager
-    const ExecutionManager = await ethers.getContractFactory("ExecutionManager");
-    executionManager = await ExecutionManager.deploy();
-    await executionManager.deployed();
-
-    // Deploy Strategies for trade execution
-    const StrategyAnyItemFromCollectionForFixedPrice = await ethers.getContractFactory(
-      "StrategyAnyItemFromCollectionForFixedPrice"
-    );
-    strategyAnyItemFromCollectionForFixedPrice = await StrategyAnyItemFromCollectionForFixedPrice.deploy(200);
-    await strategyAnyItemFromCollectionForFixedPrice.deployed();
-
-    const StrategyAnyItemInASetForAFixedPrice = await ethers.getContractFactory("StrategyAnyItemInASetForAFixedPrice");
-    strategyAnyItemInASetForAFixedPrice = await StrategyAnyItemInASetForAFixedPrice.deploy(standardProtocolFee);
-    await strategyAnyItemInASetForAFixedPrice.deployed();
-
-    const StrategyDutchAuction = await ethers.getContractFactory("StrategyDutchAuction");
-    strategyDutchAuction = await StrategyDutchAuction.deploy(
-      standardProtocolFee,
-      BigNumber.from("900") // 15 minutes
-    );
-
-    await strategyDutchAuction.deployed();
-
-    const StrategyPrivateSale = await ethers.getContractFactory("StrategyPrivateSale");
-    strategyPrivateSale = await StrategyPrivateSale.deploy(constants.Zero);
-    await strategyPrivateSale.deployed();
-
-    const StrategyStandardSaleForFixedPrice = await ethers.getContractFactory("StrategyStandardSaleForFixedPrice");
-    strategyStandardSaleForFixedPrice = await StrategyStandardSaleForFixedPrice.deploy(standardProtocolFee);
-    await strategyStandardSaleForFixedPrice.deployed();
-
-    // Whitelist these five strategies
-    await executionManager.connect(admin).addStrategy(strategyStandardSaleForFixedPrice.address);
-    await executionManager.connect(admin).addStrategy(strategyAnyItemFromCollectionForFixedPrice.address);
-    await executionManager.connect(admin).addStrategy(strategyAnyItemInASetForAFixedPrice.address);
-    await executionManager.connect(admin).addStrategy(strategyDutchAuction.address);
-    await executionManager.connect(admin).addStrategy(strategyPrivateSale.address);
-
-    // Deploy RoyaltyFee Registry/Setter/Manager
-    const RoyaltyFeeRegistry = await ethers.getContractFactory("RoyaltyFeeRegistry");
-    royaltyFeeRegistry = await RoyaltyFeeRegistry.deploy(royaltyFeeLimit);
-    await royaltyFeeRegistry.deployed();
-
-    const RoyaltyFeeSetter = await ethers.getContractFactory("RoyaltyFeeSetter");
-    royaltyFeeSetter = await RoyaltyFeeSetter.deploy(royaltyFeeRegistry.address);
-    await royaltyFeeSetter.deployed();
-
-    const RoyaltyFeeManager = await ethers.getContractFactory("RoyaltyFeeManager");
-    royaltyFeeManager = await RoyaltyFeeManager.deploy(royaltyFeeRegistry.address);
-    await royaltyFeeSetter.deployed();
-
-    // Transfer ownership of RoyaltyFeeRegistry to RoyaltyFeeSetter
-    await royaltyFeeRegistry.connect(admin).transferOwnership(royaltyFeeSetter.address);
-
-    // Deploy LooksRare exchange
-    const LooksRareExchange = await ethers.getContractFactory("LooksRareExchange");
-    looksRareExchange = await LooksRareExchange.deploy(
-      currencyManager.address,
-      executionManager.address,
-      royaltyFeeManager.address,
-      weth.address,
-      feeRecipient.address
-    );
-    await looksRareExchange.deployed();
-
-    // Deploy transfer managers and transfer selector
-    const TransferManagerERC721 = await ethers.getContractFactory("TransferManagerERC721");
-    transferManagerERC721 = await TransferManagerERC721.deploy(looksRareExchange.address);
-    await transferManagerERC721.deployed();
-    const TransferManagerERC1155 = await ethers.getContractFactory("TransferManagerERC1155");
-    transferManagerERC1155 = await TransferManagerERC1155.deploy(looksRareExchange.address);
-    await transferManagerERC1155.deployed();
-    const TransferManagerNonCompliantERC721 = await ethers.getContractFactory("TransferManagerNonCompliantERC721");
-    transferManagerNonCompliantERC721 = await TransferManagerNonCompliantERC721.deploy(looksRareExchange.address);
-    await transferManagerNonCompliantERC721.deployed();
-    const TransferSelectorNFT = await ethers.getContractFactory("TransferSelectorNFT");
-    transferSelectorNFT = await TransferSelectorNFT.deploy(
-      transferManagerERC721.address,
-      transferManagerERC1155.address
-    );
-    await transferSelectorNFT.deployed();
-
-    // Set TransferSelectorNFT in LooksRare exchange
-    await looksRareExchange.connect(admin).updateTransferSelectorNFT(transferSelectorNFT.address);
+    [
+      weth,
+      mockERC721,
+      mockERC1155,
+      mockUSDT,
+      mockERC721WithRoyalty,
+      currencyManager,
+      executionManager,
+      transferSelectorNFT,
+      transferManagerERC721,
+      transferManagerERC1155,
+      transferManagerNonCompliantERC721,
+      looksRareExchange,
+      strategyStandardSaleForFixedPrice,
+      strategyAnyItemFromCollectionForFixedPrice,
+      strategyDutchAuction,
+      strategyPrivateSale,
+      strategyAnyItemInASetForAFixedPrice,
+      royaltyFeeRegistry,
+      royaltyFeeManager,
+      royaltyFeeSetter,
+    ] = await setUp(admin, feeRecipient, royaltyCollector, standardProtocolFee, royaltyFeeLimit);
 
     for (const user of accounts) {
       if (user !== admin && user !== feeRecipient && user !== royaltyCollector) {
@@ -214,7 +120,7 @@ describe("LooksRare Exchange", () => {
     // Verify the domain separator is properly computed
     assert.equal(await looksRareExchange.DOMAIN_SEPARATOR(), computeDomainSeparator(looksRareExchange.address));
 
-    // Set up defaults startTime/endTime
+    // Set up defaults startTime/endTime (for orders)
     startTimeOrder = BigNumber.from((await ethers.provider.getBlock(await ethers.provider.getBlockNumber())).timestamp);
     endTimeOrder = startTimeOrder.add(BigNumber.from("1000"));
   });
