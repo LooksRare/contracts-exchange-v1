@@ -6,6 +6,15 @@
   "author": "LooksRare",
   "license": "MIT",
   "private": false,
+  "files": [
+    "/abis/*.json",
+    "/contracts/*.sol",
+    "/contracts/executionStrategies/*.sol",
+    "/contracts/interfaces/*.sol",
+    "/contracts/libraries/*.sol",
+    "/contracts/royaltyFeeHelpers/*.sol",
+    "/contracts/transferManagers/*.sol"
+  ],
   "keywords": [
     "looksrare"
   ],
