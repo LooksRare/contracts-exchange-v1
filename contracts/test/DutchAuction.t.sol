@@ -20,6 +20,7 @@ abstract contract TestParameters {
     bytes32 internal _R;
     bytes32 internal _S;
 
+    // Dutch Auction constructor parameters
     uint256 internal _PROTOCOL_FEE = 200;
     uint256 internal _MIN_AUCTION_LENGTH = 15 minutes;
 }
@@ -31,17 +32,20 @@ contract StrategyDutchAuctionTest is TestHelpers, TestParameters {
         strategyDutchAuction = new StrategyDutchAuction(_PROTOCOL_FEE, _MIN_AUCTION_LENGTH);
     }
 
-    function testTimeOverflow(uint32 auctionLength) public {
-        uint256 startTime = block.timestamp;
+    function testTimeAndPriceUnderOverflow(
+        uint96 auctionLength,
+        uint256 startPrice,
+        uint256 endPrice
+    ) public {
         cheats.assume(_MIN_AUCTION_LENGTH < uint256(auctionLength));
+        cheats.assume(startPrice > endPrice);
+
+        uint256 startTime = block.timestamp;
         uint256 endTime = startTime + uint256(auctionLength);
-        uint256 startPrice = 2 ether;
-        uint256 endPrice = 0.5 ether;
+        bytes memory makerParams = abi.encode(startPrice);
 
         uint256 takerPrice = startPrice -
             (((startPrice - endPrice) * (block.timestamp - startTime)) / (endTime - startTime));
-
-        bytes memory makerParams = abi.encode(startPrice);
 
         OrderTypes.TakerOrder memory takerBidOrder = OrderTypes.TakerOrder(
             false,
