@@ -2,7 +2,6 @@
   "name": "@looksrare/contracts-exchange-v1",
   "version": "1.0.0",
   "description": "LooksRare exchange smart contracts (v1)",
-  "main": "index.js",
   "author": "LooksRare",
   "license": "MIT",
   "private": false,
