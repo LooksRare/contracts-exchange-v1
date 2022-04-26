@@ -15,10 +15,10 @@ This project contains all smart contracts used for the current LooksRare exchang
 
 ```shell
 # Yarn
-yarn add --dev @looksrare/contracts-exchange-v1
+yarn add @looksrare/contracts-exchange-v1
 
 # NPM
-npm install @looksrare/contracts-exchange-v1 --save-dev
+npm install @looksrare/contracts-exchange-v1
 ```
 
 ## NPM package
