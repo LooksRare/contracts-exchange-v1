@@ -1,4 +1,4 @@
-# LooksRare smart contracts exchange (v1)
+# @looksrare/contracts-exchange-v1
 
 ## Description
 
