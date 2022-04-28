@@ -12,4 +12,7 @@ module.exports = {
   github: {
     release: true,
   },
+  hooks: {
+    "after:bump": "yarn compile:force",
+  },
 };
