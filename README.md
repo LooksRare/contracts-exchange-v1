@@ -74,3 +74,9 @@ npx prettier '**/*.{json,sol,md}' --write
 npx solhint 'contracts/**/*.sol'
 npx solhint 'contracts/**/*.sol' --fix
 ```
+
+## Release
+
+- Create a [Personal access token](https://github.com/settings/tokens/new?scopes=repo&description=release-it) (Don't change the default scope)
+- Create an `.env` (copy `.env.template`) and set your GitHub personal access token.
+- `yarn release` will run all the checks, build, and publish the package, and publish the GitHub release note.
