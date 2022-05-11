@@ -1,3 +1,7 @@
+/**
+ * WARNING!! DO NOT USE IN PRODUCTION OR WITH ANY FUNDS.
+ * THESE PUBLIC/PRIVATE KEYS COME FROM HARDHAT ARE PUBLICLY KNOWN.
+ */
 export function findPrivateKey(publicKey: string): string {
   switch (publicKey.toLowerCase()) {
     case "0x70997970c51812dc3a010c7d01b50e0d17dc79c8":
