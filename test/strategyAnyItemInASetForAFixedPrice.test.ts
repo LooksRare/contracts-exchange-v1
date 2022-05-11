@@ -14,7 +14,7 @@ import { tokenSetUp } from "./token-set-up";
 
 const { defaultAbiCoder, parseEther } = utils;
 
-describe("Strategy - AnyItemInASetForAFixedPrice ('Trait orders')", () => {
+describe("Strategy - AnyItemInASetForFixedPrice ('Trait orders')", () => {
   // Mock contracts
   let mockERC721: Contract;
   let mockERC721WithRoyalty: Contract;
@@ -27,7 +27,7 @@ describe("Strategy - AnyItemInASetForAFixedPrice ('Trait orders')", () => {
   let looksRareExchange: Contract;
 
   // Strategy contract
-  let strategyAnyItemInASetForAFixedPrice: Contract;
+  let strategyAnyItemInASetForFixedPrice: Contract;
 
   // Other global variables
   let standardProtocolFee: BigNumber;
@@ -63,7 +63,7 @@ describe("Strategy - AnyItemInASetForAFixedPrice ('Trait orders')", () => {
       ,
       ,
       ,
-      strategyAnyItemInASetForAFixedPrice,
+      strategyAnyItemInASetForFixedPrice,
       ,
       ,
       ,
@@ -117,7 +117,7 @@ describe("Strategy - AnyItemInASetForAFixedPrice ('Trait orders')", () => {
       tokenId: constants.Zero,
       price: parseEther("3"),
       amount: constants.One,
-      strategy: strategyAnyItemInASetForAFixedPrice.address,
+      strategy: strategyAnyItemInASetForFixedPrice.address,
       currency: weth.address,
       nonce: constants.Zero,
       startTime: startTimeOrder,
@@ -145,7 +145,7 @@ describe("Strategy - AnyItemInASetForAFixedPrice ('Trait orders')", () => {
         makerBidOrder.nonce,
         takerAskUser.address,
         makerBidUser.address,
-        strategyAnyItemInASetForAFixedPrice.address,
+        strategyAnyItemInASetForFixedPrice.address,
         makerBidOrder.currency,
         makerBidOrder.collection,
         takerAskOrder.tokenId,
@@ -188,7 +188,7 @@ describe("Strategy - AnyItemInASetForAFixedPrice ('Trait orders')", () => {
       tokenId: constants.Zero, // not used
       price: parseEther("3"),
       amount: constants.One,
-      strategy: strategyAnyItemInASetForAFixedPrice.address,
+      strategy: strategyAnyItemInASetForFixedPrice.address,
       currency: weth.address,
       nonce: constants.Zero,
       startTime: startTimeOrder,
@@ -229,7 +229,7 @@ describe("Strategy - AnyItemInASetForAFixedPrice ('Trait orders')", () => {
       tokenId: constants.Zero,
       price: parseEther("3"),
       amount: constants.One,
-      strategy: strategyAnyItemInASetForAFixedPrice.address,
+      strategy: strategyAnyItemInASetForFixedPrice.address,
       currency: weth.address,
       nonce: constants.Zero,
       startTime: startTimeOrder,

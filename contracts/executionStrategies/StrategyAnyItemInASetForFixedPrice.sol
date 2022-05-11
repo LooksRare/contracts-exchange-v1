@@ -6,11 +6,11 @@ import {OrderTypes} from "../libraries/OrderTypes.sol";
 import {IExecutionStrategy} from "../interfaces/IExecutionStrategy.sol";
 
 /**
- * @title StrategyAnyItemInASetForAFixedPrice
+ * @title StrategyAnyItemInASetForFixedPrice
  * @notice Strategy to send an order at a fixed price that can be
  * matched by any tokenId in a set of tokenIds.
  */
-contract StrategyAnyItemInASetForAFixedPrice is IExecutionStrategy {
+contract StrategyAnyItemInASetForFixedPrice is IExecutionStrategy {
     uint256 public immutable PROTOCOL_FEE;
 
     /**
