@@ -1,6 +1,6 @@
 /**
  * WARNING!! DO NOT USE IN PRODUCTION OR WITH ANY FUNDS.
- * THESE PUBLIC/PRIVATE KEYS COME FROM HARDHAT ARE PUBLICLY KNOWN.
+ * THESE PUBLIC/PRIVATE KEYS COME FROM HARDHAT AND ARE PUBLICLY KNOWN.
  */
 export function findPrivateKey(publicKey: string): string {
   switch (publicKey.toLowerCase()) {
