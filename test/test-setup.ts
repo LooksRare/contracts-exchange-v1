@@ -51,9 +51,9 @@ export async function setUp(
   );
   const strategyAnyItemFromCollectionForFixedPrice = await StrategyAnyItemFromCollectionForFixedPrice.deploy(200);
   await strategyAnyItemFromCollectionForFixedPrice.deployed();
-  const StrategyAnyItemInASetForAFixedPrice = await ethers.getContractFactory("StrategyAnyItemInASetForAFixedPrice");
-  const strategyAnyItemInASetForAFixedPrice = await StrategyAnyItemInASetForAFixedPrice.deploy(standardProtocolFee);
-  await strategyAnyItemInASetForAFixedPrice.deployed();
+  const StrategyAnyItemInASetForFixedPrice = await ethers.getContractFactory("StrategyAnyItemInASetForFixedPrice");
+  const strategyAnyItemInASetForFixedPrice = await StrategyAnyItemInASetForFixedPrice.deploy(standardProtocolFee);
+  await strategyAnyItemInASetForFixedPrice.deployed();
   const StrategyDutchAuction = await ethers.getContractFactory("StrategyDutchAuction");
   const strategyDutchAuction = await StrategyDutchAuction.deploy(
     standardProtocolFee,
@@ -70,7 +70,7 @@ export async function setUp(
   // Whitelist these five strategies
   await executionManager.connect(admin).addStrategy(strategyStandardSaleForFixedPrice.address);
   await executionManager.connect(admin).addStrategy(strategyAnyItemFromCollectionForFixedPrice.address);
-  await executionManager.connect(admin).addStrategy(strategyAnyItemInASetForAFixedPrice.address);
+  await executionManager.connect(admin).addStrategy(strategyAnyItemInASetForFixedPrice.address);
   await executionManager.connect(admin).addStrategy(strategyDutchAuction.address);
   await executionManager.connect(admin).addStrategy(strategyPrivateSale.address);
 
@@ -140,7 +140,7 @@ export async function setUp(
     strategyAnyItemFromCollectionForFixedPrice,
     strategyDutchAuction,
     strategyPrivateSale,
-    strategyAnyItemInASetForAFixedPrice,
+    strategyAnyItemInASetForFixedPrice,
     royaltyFeeRegistry,
     royaltyFeeManager,
     royaltyFeeSetter,
