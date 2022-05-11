@@ -1,8 +1,5 @@
 import { assert, expect } from "chai";
 import { BigNumber, constants, Contract, utils } from "ethers";
-import { MerkleTree } from "merkletreejs";
-/* eslint-disable node/no-extraneous-import */
-import { keccak256 } from "js-sha3";
 import { ethers } from "hardhat";
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 
@@ -11,6 +8,7 @@ import { MakerOrderWithSignature, TakerOrder } from "./helpers/order-types";
 import { createMakerOrder, createTakerOrder } from "./helpers/order-helper";
 import { computeDomainSeparator, computeOrderHash } from "./helpers/signature-helper";
 import { setUp } from "./test-setup";
+import { tokenSetUp } from "./token-set-up";
 
 const { defaultAbiCoder, parseEther } = utils;
 
@@ -34,12 +32,9 @@ describe("LooksRare Exchange", () => {
   let royaltyFeeSetter: Contract;
   let looksRareExchange: Contract;
 
-  // Strategy contracts
+  // Strategy contracts (used for this test file)
   let strategyPrivateSale: Contract;
-  let strategyDutchAuction: Contract;
   let strategyStandardSaleForFixedPrice: Contract;
-  let strategyAnyItemFromCollectionForFixedPrice: Contract;
-  let strategyAnyItemInASetForAFixedPrice: Contract;
 
   // Other global variables
   let standardProtocolFee: BigNumber;
@@ -72,50 +67,25 @@ describe("LooksRare Exchange", () => {
       transferManagerNonCompliantERC721,
       looksRareExchange,
       strategyStandardSaleForFixedPrice,
-      strategyAnyItemFromCollectionForFixedPrice,
-      strategyDutchAuction,
+      ,
+      ,
       strategyPrivateSale,
-      strategyAnyItemInASetForAFixedPrice,
+      ,
       royaltyFeeRegistry,
       royaltyFeeManager,
       royaltyFeeSetter,
     ] = await setUp(admin, feeRecipient, royaltyCollector, standardProtocolFee, royaltyFeeLimit);
 
-    for (const user of accounts) {
-      if (user !== admin && user !== feeRecipient && user !== royaltyCollector) {
-        // Each user gets 30 WETH
-        await weth.connect(user).deposit({ value: parseEther("30") });
-
-        // Set approval for WETH
-        await weth.connect(user).approve(looksRareExchange.address, constants.MaxUint256);
-
-        // Each users mints 1M USDT
-        await mockUSDT.connect(user).mint(user.address, parseEther("1000000"));
-
-        // Set approval for USDT
-        await mockUSDT.connect(user).approve(looksRareExchange.address, constants.MaxUint256);
-
-        // Each user mints 1 ERC721 NFT
-        await mockERC721.connect(user).mint(user.address);
-
-        // Set approval for all tokens in mock collection to transferManager contract for ERC721
-        await mockERC721.connect(user).setApprovalForAll(transferManagerERC721.address, true);
-
-        // Each user mints 1 ERC721WithRoyalty NFT
-        await mockERC721WithRoyalty.connect(user).mint(user.address);
-
-        // Set approval for all tokens in mock collection to transferManager contract for ERC721WithRoyalty
-        await mockERC721WithRoyalty.connect(user).setApprovalForAll(transferManagerERC721.address, true);
-
-        // Each user batch mints 2 ERC1155 for tokenIds 1, 2, 3
-        await mockERC1155
-          .connect(user)
-          .mintBatch(user.address, ["1", "2", "3"], ["2", "2", "2"], defaultAbiCoder.encode([], []));
-
-        // Set approval for all tokens in mock collection to transferManager contract for ERC1155
-        await mockERC1155.connect(user).setApprovalForAll(transferManagerERC1155.address, true);
-      }
-    }
+    await tokenSetUp(
+      accounts.slice(1, 10),
+      weth,
+      mockERC721,
+      mockERC721WithRoyalty,
+      mockERC1155,
+      looksRareExchange,
+      transferManagerERC721,
+      transferManagerERC1155
+    );
 
     // Verify the domain separator is properly computed
     assert.equal(await looksRareExchange.DOMAIN_SEPARATOR(), computeDomainSeparator(looksRareExchange.address));
@@ -425,451 +395,6 @@ describe("LooksRare Exchange", () => {
   });
 
   describe("#2 - Non-standard orders", async () => {
-    it("Collection Order/ERC721 - MakerBid order is matched by TakerAsk order", async () => {
-      const makerBidUser = accounts[1];
-      const takerAskUser = accounts[5];
-
-      const makerBidOrder: MakerOrderWithSignature = await createMakerOrder({
-        isOrderAsk: false,
-        signer: makerBidUser.address,
-        collection: mockERC721.address,
-        tokenId: constants.Zero, // Not used
-        price: parseEther("3"),
-        amount: constants.One,
-        strategy: strategyAnyItemFromCollectionForFixedPrice.address,
-        currency: weth.address,
-        nonce: constants.Zero,
-        startTime: startTimeOrder,
-        endTime: endTimeOrder,
-        minPercentageToAsk: constants.Zero,
-        params: defaultAbiCoder.encode([], []),
-        signerUser: makerBidUser,
-        verifyingContract: looksRareExchange.address,
-      });
-
-      const takerAskOrder = createTakerOrder({
-        isOrderAsk: true,
-        taker: takerAskUser.address,
-        tokenId: BigNumber.from("4"),
-        price: makerBidOrder.price,
-        minPercentageToAsk: constants.Zero,
-        params: defaultAbiCoder.encode([], []),
-      });
-
-      const tx = await looksRareExchange.connect(takerAskUser).matchBidWithTakerAsk(takerAskOrder, makerBidOrder);
-      await expect(tx)
-        .to.emit(looksRareExchange, "TakerAsk")
-        .withArgs(
-          computeOrderHash(makerBidOrder),
-          makerBidOrder.nonce,
-          takerAskUser.address,
-          makerBidUser.address,
-          strategyAnyItemFromCollectionForFixedPrice.address,
-          makerBidOrder.currency,
-          makerBidOrder.collection,
-          takerAskOrder.tokenId,
-          makerBidOrder.amount,
-          makerBidOrder.price
-        );
-
-      assert.isTrue(
-        await looksRareExchange.isUserOrderNonceExecutedOrCancelled(makerBidUser.address, makerBidOrder.nonce)
-      );
-    });
-
-    it("Collection Order/ERC1155 - MakerAsk order is matched by TakerBid order", async () => {
-      const makerBidUser = accounts[1];
-      const takerAskUser = accounts[2];
-
-      const makerBidOrder: MakerOrderWithSignature = await createMakerOrder({
-        isOrderAsk: false,
-        signer: makerBidUser.address,
-        collection: mockERC1155.address,
-        tokenId: constants.Zero, // not used
-        price: parseEther("3"),
-        amount: constants.Two,
-        strategy: strategyAnyItemFromCollectionForFixedPrice.address,
-        currency: weth.address,
-        nonce: constants.Zero,
-        startTime: startTimeOrder,
-        endTime: endTimeOrder,
-        minPercentageToAsk: constants.Zero,
-        params: defaultAbiCoder.encode([], []),
-        signerUser: makerBidUser,
-        verifyingContract: looksRareExchange.address,
-      });
-
-      const takerAskOrder = createTakerOrder({
-        isOrderAsk: true,
-        taker: takerAskUser.address,
-        price: makerBidOrder.price,
-        tokenId: BigNumber.from("2"),
-        minPercentageToAsk: constants.Zero,
-        params: defaultAbiCoder.encode([], []),
-      });
-
-      const tx = await looksRareExchange.connect(takerAskUser).matchBidWithTakerAsk(takerAskOrder, makerBidOrder);
-      await expect(tx)
-        .to.emit(looksRareExchange, "TakerAsk")
-        .withArgs(
-          computeOrderHash(makerBidOrder),
-          makerBidOrder.nonce,
-          takerAskUser.address,
-          makerBidUser.address,
-          strategyAnyItemFromCollectionForFixedPrice.address,
-          makerBidOrder.currency,
-          makerBidOrder.collection,
-          takerAskOrder.tokenId,
-          makerBidOrder.amount,
-          makerBidOrder.price
-        );
-
-      assert.isTrue(
-        await looksRareExchange.isUserOrderNonceExecutedOrCancelled(makerBidUser.address, makerBidOrder.nonce)
-      );
-    });
-
-    it("Private Sale Order/ERC721 -  No platform fee, only target can buy", async () => {
-      const makerAskUser = accounts[1];
-      const takerBidUser = accounts[2];
-      const wrongUser = accounts[3];
-
-      const makerAskOrder: MakerOrderWithSignature = await createMakerOrder({
-        isOrderAsk: true,
-        signer: makerAskUser.address,
-        collection: mockERC721.address,
-        tokenId: constants.Zero,
-        price: parseEther("5"),
-        amount: constants.One,
-        strategy: strategyPrivateSale.address,
-        currency: weth.address,
-        nonce: constants.Zero,
-        startTime: startTimeOrder,
-        endTime: endTimeOrder,
-        minPercentageToAsk: constants.Zero,
-        params: defaultAbiCoder.encode(["address"], [takerBidUser.address]),
-        signerUser: makerAskUser,
-        verifyingContract: looksRareExchange.address,
-      });
-
-      let takerBidOrder = createTakerOrder({
-        isOrderAsk: false,
-        taker: wrongUser.address,
-        tokenId: constants.Zero,
-        price: makerAskOrder.price,
-        minPercentageToAsk: constants.Zero,
-        params: defaultAbiCoder.encode([], []),
-      });
-
-      // User 3 cannot buy since the order target is only taker user
-      await expect(
-        looksRareExchange.connect(wrongUser).matchAskWithTakerBidUsingETHAndWETH(takerBidOrder, makerAskOrder, {
-          value: takerBidOrder.price,
-        })
-      ).to.be.revertedWith("Strategy: Execution invalid");
-
-      await expect(
-        looksRareExchange.connect(wrongUser).matchAskWithTakerBid(takerBidOrder, makerAskOrder)
-      ).to.be.revertedWith("Strategy: Execution invalid");
-
-      takerBidOrder = createTakerOrder({
-        isOrderAsk: false,
-        taker: takerBidUser.address,
-        price: makerAskOrder.price,
-        tokenId: constants.Zero,
-        minPercentageToAsk: constants.Zero,
-        params: defaultAbiCoder.encode([], []),
-      });
-
-      assert.deepEqual(await weth.balanceOf(feeRecipient.address), constants.Zero);
-
-      const tx = await looksRareExchange.connect(takerBidUser).matchAskWithTakerBid(takerBidOrder, makerAskOrder);
-      await expect(tx)
-        .to.emit(looksRareExchange, "TakerBid")
-        .withArgs(
-          computeOrderHash(makerAskOrder),
-          makerAskOrder.nonce,
-          takerBidUser.address,
-          makerAskUser.address,
-          strategyPrivateSale.address,
-          makerAskOrder.currency,
-          makerAskOrder.collection,
-          takerBidOrder.tokenId,
-          makerAskOrder.amount,
-          makerAskOrder.price
-        );
-
-      assert.equal(await mockERC721.ownerOf(constants.Zero), takerBidUser.address);
-      assert.isTrue(
-        await looksRareExchange.isUserOrderNonceExecutedOrCancelled(makerAskUser.address, makerAskOrder.nonce)
-      );
-      // Verify balance of treasury (aka feeRecipient) is 0
-      assert.deepEqual(await weth.balanceOf(feeRecipient.address), constants.Zero);
-    });
-
-    it("Dutch Auction Order/ERC721", async () => {
-      const makerAskUser = accounts[1];
-      const takerBidUser = accounts[2];
-
-      endTimeOrder = startTimeOrder.add(BigNumber.from("1000"));
-
-      const makerAskOrder: MakerOrderWithSignature = await createMakerOrder({
-        isOrderAsk: true,
-        signer: makerAskUser.address,
-        collection: mockERC721.address,
-        price: parseEther("1"),
-        tokenId: constants.Zero,
-        amount: constants.One,
-        strategy: strategyDutchAuction.address,
-        currency: weth.address,
-        nonce: constants.Zero,
-        startTime: startTimeOrder,
-        endTime: endTimeOrder,
-        minPercentageToAsk: constants.Zero,
-        params: defaultAbiCoder.encode(["uint256"], [parseEther("5")]),
-        signerUser: makerAskUser,
-        verifyingContract: looksRareExchange.address,
-      });
-
-      const takerBidOrder = createTakerOrder({
-        isOrderAsk: false,
-        taker: takerBidUser.address,
-        tokenId: constants.Zero,
-        price: BigNumber.from(parseEther("3").toString()),
-        minPercentageToAsk: constants.Zero,
-        params: defaultAbiCoder.encode([], []),
-      });
-
-      // User 2 cannot buy since the current auction price is not 3
-      await expect(
-        looksRareExchange.connect(takerBidUser).matchAskWithTakerBidUsingETHAndWETH(takerBidOrder, makerAskOrder, {
-          value: takerBidOrder.price,
-        })
-      ).to.be.revertedWith("Strategy: Execution invalid");
-
-      await expect(
-        looksRareExchange.connect(takerBidUser).matchAskWithTakerBid(takerBidOrder, makerAskOrder)
-      ).to.be.revertedWith("Strategy: Execution invalid");
-
-      // Advance time to half time of the auction (3 is between 5 and 1)
-      const midTimeOrder = startTimeOrder.add("500");
-      await increaseTo(midTimeOrder);
-
-      const tx = await looksRareExchange.connect(takerBidUser).matchAskWithTakerBid(takerBidOrder, makerAskOrder);
-      await expect(tx)
-        .to.emit(looksRareExchange, "TakerBid")
-        .withArgs(
-          computeOrderHash(makerAskOrder),
-          makerAskOrder.nonce,
-          takerBidUser.address,
-          makerAskUser.address,
-          strategyDutchAuction.address,
-          makerAskOrder.currency,
-          makerAskOrder.collection,
-          takerBidOrder.tokenId,
-          makerAskOrder.amount,
-          takerBidOrder.price
-        );
-
-      assert.equal(await mockERC721.ownerOf("0"), takerBidUser.address);
-      assert.isTrue(
-        await looksRareExchange.isUserOrderNonceExecutedOrCancelled(makerAskUser.address, makerAskOrder.nonce)
-      );
-    });
-
-    it("Dutch Auction Order/ERC1155 - Buyer overpays", async () => {
-      const makerAskUser = accounts[1];
-      const takerBidUser = accounts[2];
-      endTimeOrder = startTimeOrder.add("1000");
-
-      const makerAskOrder: MakerOrderWithSignature = await createMakerOrder({
-        isOrderAsk: true,
-        signer: makerAskUser.address,
-        collection: mockERC1155.address,
-        price: parseEther("1"),
-        tokenId: constants.One,
-        amount: constants.Two,
-        strategy: strategyDutchAuction.address,
-        currency: weth.address,
-        nonce: constants.Zero,
-        startTime: startTimeOrder,
-        endTime: endTimeOrder,
-        minPercentageToAsk: constants.Zero,
-        params: defaultAbiCoder.encode(["uint256"], [parseEther("5")]),
-        signerUser: makerAskUser,
-        verifyingContract: looksRareExchange.address,
-      });
-
-      const takerBidOrder = createTakerOrder({
-        isOrderAsk: false,
-        taker: takerBidUser.address,
-        tokenId: constants.One,
-        price: BigNumber.from(parseEther("4.5").toString()),
-        minPercentageToAsk: constants.Zero,
-        params: defaultAbiCoder.encode([], []),
-      });
-
-      // Advance time to half time of the auction (3 is between 5 and 1)
-      const midTimeOrder = startTimeOrder.add("500");
-      await increaseTo(midTimeOrder);
-
-      // User 2 buys with 4.5 WETH (when auction price was at 3 WETH)
-      const tx = await looksRareExchange.connect(takerBidUser).matchAskWithTakerBid(takerBidOrder, makerAskOrder);
-      await expect(tx)
-        .to.emit(looksRareExchange, "TakerBid")
-        .withArgs(
-          computeOrderHash(makerAskOrder),
-          makerAskOrder.nonce,
-          takerBidUser.address,
-          makerAskUser.address,
-          strategyDutchAuction.address,
-          makerAskOrder.currency,
-          makerAskOrder.collection,
-          takerBidOrder.tokenId,
-          makerAskOrder.amount,
-          takerBidOrder.price
-        );
-
-      // Verify amount transfered to the protocol fee (user1) is (protocolFee) * 4.5 WETH
-      const protocolFee = await strategyDutchAuction.PROTOCOL_FEE();
-      await expect(tx)
-        .to.emit(weth, "Transfer")
-        .withArgs(takerBidUser.address, feeRecipient.address, takerBidOrder.price.mul(protocolFee).div("10000"));
-
-      // User 2 had minted 2 tokenId=1 so he has 4
-      assert.deepEqual(await mockERC1155.balanceOf(takerBidUser.address, "1"), BigNumber.from("4"));
-    });
-
-    it("Trait-based Order/ERC721 - MakerAsk order is matched by TakerBid order", async () => {
-      const takerAskUser = accounts[3]; // has tokenId=2
-      const makerBidUser = accounts[1];
-
-      // User wishes to buy either tokenId = 0, 2, 3, or 12
-      const eligibleTokenIds = ["0", "2", "3", "12"];
-
-      // Compute the leaves using Solidity keccak256 (Equivalent of keccak256 with abi.encodePacked) and converts to hex
-      const leaves = eligibleTokenIds.map((x) => "0x" + utils.solidityKeccak256(["uint256"], [x]).substr(2));
-
-      // Compute MerkleTree based on the computed leaves
-      const tree = new MerkleTree(leaves, keccak256, { sortPairs: true });
-
-      // Compute the proof for index=1 (aka tokenId=2)
-      const hexProof = tree.getHexProof(leaves[1], 1);
-
-      // Compute the root of the tree
-      const hexRoot = tree.getHexRoot();
-
-      // Verify leaf is matched in the tree with the computed root
-      assert.isTrue(tree.verify(hexProof, leaves[1], hexRoot));
-
-      const makerBidOrder: MakerOrderWithSignature = await createMakerOrder({
-        isOrderAsk: false,
-        signer: makerBidUser.address,
-        collection: mockERC721.address,
-        tokenId: constants.Zero,
-        price: parseEther("3"),
-        amount: constants.One,
-        strategy: strategyAnyItemInASetForAFixedPrice.address,
-        currency: weth.address,
-        nonce: constants.Zero,
-        startTime: startTimeOrder,
-        endTime: endTimeOrder,
-        minPercentageToAsk: constants.Zero,
-        params: defaultAbiCoder.encode(["bytes32"], [hexRoot]),
-        signerUser: makerBidUser,
-        verifyingContract: looksRareExchange.address,
-      });
-
-      const takerAskOrder = createTakerOrder({
-        isOrderAsk: true,
-        taker: takerAskUser.address,
-        tokenId: BigNumber.from("2"),
-        price: makerBidOrder.price,
-        minPercentageToAsk: constants.Zero,
-        params: defaultAbiCoder.encode(["bytes32[]"], [hexProof]),
-      });
-
-      const tx = await looksRareExchange.connect(takerAskUser).matchBidWithTakerAsk(takerAskOrder, makerBidOrder);
-      await expect(tx)
-        .to.emit(looksRareExchange, "TakerAsk")
-        .withArgs(
-          computeOrderHash(makerBidOrder),
-          makerBidOrder.nonce,
-          takerAskUser.address,
-          makerBidUser.address,
-          strategyAnyItemInASetForAFixedPrice.address,
-          makerBidOrder.currency,
-          makerBidOrder.collection,
-          takerAskOrder.tokenId,
-          makerBidOrder.amount,
-          makerBidOrder.price
-        );
-
-      assert.equal(await mockERC721.ownerOf("2"), makerBidUser.address);
-      assert.isTrue(
-        await looksRareExchange.isUserOrderNonceExecutedOrCancelled(makerBidUser.address, makerBidOrder.nonce)
-      );
-    });
-
-    it("Trait-based Order/ERC721 - TokenIds not in the set cannot be sold", async () => {
-      const takerAskUser = accounts[3]; // has tokenId=2
-      const makerBidUser = accounts[1];
-
-      // User wishes to buy either tokenId = 1, 2, 3, 4, or 12
-      const eligibleTokenIds = ["1", "2", "3", "4", "12"];
-
-      // Compute the leaves using Solidity keccak256 (Equivalent of keccak256 with abi.encodePacked) and converts to hex
-      const leaves = eligibleTokenIds.map((x) => "0x" + utils.solidityKeccak256(["uint256"], [x]).substr(2));
-
-      // Compute MerkleTree based on the computed leaves
-      const tree = new MerkleTree(leaves, keccak256, { sortPairs: true });
-
-      // Compute the proof for index=1 (aka tokenId=2)
-      const hexProof = tree.getHexProof(leaves[1], 1);
-
-      // Compute the root of the tree
-      const hexRoot = tree.getHexRoot();
-
-      // Verify leaf is matched in the tree with the computed root
-      assert.isTrue(tree.verify(hexProof, leaves[1], hexRoot));
-
-      const makerBidOrder: MakerOrderWithSignature = await createMakerOrder({
-        isOrderAsk: false,
-        signer: makerBidUser.address,
-        collection: mockERC721.address,
-        tokenId: constants.Zero, // not used
-        price: parseEther("3"),
-        amount: constants.One,
-        strategy: strategyAnyItemInASetForAFixedPrice.address,
-        currency: weth.address,
-        nonce: constants.Zero,
-        startTime: startTimeOrder,
-        endTime: endTimeOrder,
-        minPercentageToAsk: constants.Zero,
-        params: defaultAbiCoder.encode(["bytes32"], [hexRoot]),
-        signerUser: makerBidUser,
-        verifyingContract: looksRareExchange.address,
-      });
-
-      for (const tokenId of Array.from(Array(20).keys())) {
-        // If the tokenId is not included, it skips
-        if (!eligibleTokenIds.includes(tokenId.toString())) {
-          const takerAskOrder = createTakerOrder({
-            isOrderAsk: true,
-            taker: takerAskUser.address,
-            tokenId: BigNumber.from(tokenId),
-            price: parseEther("3"),
-            minPercentageToAsk: constants.Zero,
-            params: defaultAbiCoder.encode(["bytes32[]"], [hexProof]),
-          });
-
-          await expect(
-            looksRareExchange.connect(takerAskUser).matchBidWithTakerAsk(takerAskOrder, makerBidOrder)
-          ).to.be.revertedWith("Strategy: Execution invalid");
-        }
-      }
-    });
-
     it("ERC1271/Contract Signature - MakerBid order is matched by TakerAsk order", async () => {
       const userSigningThroughContract = accounts[1];
       const takerAskUser = accounts[2];
@@ -2243,6 +1768,12 @@ describe("LooksRare Exchange", () => {
       const makerAskUser = accounts[1];
       const takerBidUser = accounts[2];
 
+      // Each users mints 1M USDT
+      await mockUSDT.connect(takerBidUser).mint(takerBidUser.address, parseEther("1000000"));
+
+      // Set approval for USDT
+      await mockUSDT.connect(takerBidUser).approve(looksRareExchange.address, constants.MaxUint256);
+
       const makerAskOrder = await createMakerOrder({
         isOrderAsk: true,
         signer: makerAskUser.address,
@@ -2446,191 +1977,6 @@ describe("LooksRare Exchange", () => {
   });
 
   describe("#5 - Unusual logic revertions", async () => {
-    it("Dutch auction - Revert as expected", async () => {
-      const makerAskUser = accounts[1];
-      const takerBidUser = accounts[2];
-
-      let makerAskOrder = await createMakerOrder({
-        isOrderAsk: true,
-        signer: makerAskUser.address,
-        collection: mockERC721.address,
-        tokenId: constants.Zero,
-        price: parseEther("3"),
-        amount: constants.One,
-        strategy: strategyDutchAuction.address,
-        currency: weth.address,
-        nonce: constants.Zero,
-        startTime: startTimeOrder,
-        endTime: endTimeOrder,
-        minPercentageToAsk: constants.Zero,
-        params: defaultAbiCoder.encode(["uint256", "uint256"], [parseEther("3"), parseEther("5")]), // startPrice/endPrice
-        signerUser: makerAskUser,
-        verifyingContract: looksRareExchange.address,
-      });
-
-      const takerBidOrder: TakerOrder = {
-        isOrderAsk: false,
-        taker: takerBidUser.address,
-        tokenId: makerAskOrder.tokenId,
-        price: makerAskOrder.price,
-        minPercentageToAsk: constants.Zero,
-        params: defaultAbiCoder.encode([], []),
-      };
-
-      await expect(
-        looksRareExchange.connect(takerBidUser).matchAskWithTakerBid(takerBidOrder, makerAskOrder)
-      ).to.be.revertedWith("Dutch Auction: Start price must be greater than end price");
-
-      // EndTimeOrder is 50 seconds after startTimeOrder
-      endTimeOrder = startTimeOrder.add(BigNumber.from("50"));
-
-      makerAskOrder = await createMakerOrder({
-        isOrderAsk: true,
-        signer: makerAskUser.address,
-        collection: mockERC721.address,
-        tokenId: constants.Zero,
-        price: parseEther("3"),
-        amount: constants.One,
-        strategy: strategyDutchAuction.address,
-        currency: weth.address,
-        nonce: constants.Zero,
-        startTime: startTimeOrder,
-        endTime: endTimeOrder,
-        minPercentageToAsk: constants.Zero,
-        params: defaultAbiCoder.encode(["uint256", "uint256"], [parseEther("5"), parseEther("3")]), // startPrice/endPrice
-        signerUser: makerAskUser,
-        verifyingContract: looksRareExchange.address,
-      });
-
-      await expect(
-        looksRareExchange.connect(takerBidUser).matchAskWithTakerBid(takerBidOrder, makerAskOrder)
-      ).to.be.revertedWith("Dutch Auction: Length must be longer");
-    });
-
-    it("Strategies (Collection, Trait-based, Dutch, PrivateSale) - Cannot match if wrong side", async () => {
-      const makerAskUser = accounts[1];
-      const takerBidUser = accounts[2];
-
-      // 1. Collection order
-      let makerAskOrder: MakerOrderWithSignature = await createMakerOrder({
-        isOrderAsk: true,
-        signer: makerAskUser.address,
-        collection: mockERC721.address,
-        tokenId: constants.Zero,
-        price: parseEther("3"),
-        amount: constants.One,
-        strategy: strategyAnyItemFromCollectionForFixedPrice.address,
-        currency: weth.address,
-        nonce: constants.Zero,
-        startTime: startTimeOrder,
-        endTime: endTimeOrder,
-        minPercentageToAsk: constants.Zero,
-        params: defaultAbiCoder.encode([], []),
-        signerUser: makerAskUser,
-        verifyingContract: looksRareExchange.address,
-      });
-
-      let takerBidOrder: TakerOrder = {
-        isOrderAsk: false,
-        taker: takerBidUser.address,
-        tokenId: makerAskOrder.tokenId,
-        price: makerAskOrder.price,
-        minPercentageToAsk: constants.Zero,
-        params: defaultAbiCoder.encode([], []),
-      };
-
-      await expect(
-        looksRareExchange.connect(takerBidUser).matchAskWithTakerBid(takerBidOrder, makerAskOrder)
-      ).to.be.revertedWith("Strategy: Execution invalid");
-
-      // 2. Trait-based order
-      makerAskOrder = await createMakerOrder({
-        isOrderAsk: true,
-        signer: makerAskUser.address,
-        collection: mockERC721.address,
-        tokenId: constants.Zero,
-        price: parseEther("3"),
-        amount: constants.One,
-        strategy: strategyAnyItemInASetForAFixedPrice.address,
-        currency: weth.address,
-        nonce: constants.Zero,
-        startTime: startTimeOrder,
-        endTime: endTimeOrder,
-        minPercentageToAsk: constants.Zero,
-        params: defaultAbiCoder.encode([], []), // these parameters are used after it reverts
-        signerUser: makerAskUser,
-        verifyingContract: looksRareExchange.address,
-      });
-
-      takerBidOrder = {
-        isOrderAsk: false,
-        taker: takerBidUser.address,
-        tokenId: makerAskOrder.tokenId,
-        price: makerAskOrder.price,
-        minPercentageToAsk: constants.Zero,
-        params: defaultAbiCoder.encode([], []),
-      };
-
-      await expect(
-        looksRareExchange.connect(takerBidUser).matchAskWithTakerBid(takerBidOrder, makerAskOrder)
-      ).to.be.revertedWith("Strategy: Execution invalid");
-
-      // 3. Private Sale
-      let makerBidOrder: MakerOrderWithSignature = await createMakerOrder({
-        isOrderAsk: false,
-        signer: takerBidUser.address,
-        collection: mockERC721.address,
-        tokenId: constants.Zero,
-        amount: constants.One,
-        price: parseEther("3"),
-        strategy: strategyPrivateSale.address,
-        currency: weth.address,
-        nonce: constants.Zero,
-        startTime: startTimeOrder,
-        endTime: endTimeOrder,
-        minPercentageToAsk: constants.Zero,
-        params: defaultAbiCoder.encode([], []),
-        signerUser: takerBidUser,
-        verifyingContract: looksRareExchange.address,
-      });
-
-      const takerAskOrder: TakerOrder = {
-        isOrderAsk: true,
-        taker: makerAskUser.address,
-        tokenId: makerBidOrder.tokenId,
-        price: makerBidOrder.price,
-        minPercentageToAsk: constants.Zero,
-        params: defaultAbiCoder.encode([], []),
-      };
-
-      await expect(
-        looksRareExchange.connect(makerAskUser).matchBidWithTakerAsk(takerAskOrder, makerBidOrder)
-      ).to.be.revertedWith("Strategy: Execution invalid");
-
-      // 4. Dutch Auction
-      makerBidOrder = await createMakerOrder({
-        isOrderAsk: false,
-        signer: takerBidUser.address,
-        collection: mockERC721.address,
-        tokenId: constants.Zero,
-        price: parseEther("3"),
-        amount: constants.One,
-        strategy: strategyDutchAuction.address,
-        currency: weth.address,
-        nonce: constants.Zero,
-        startTime: startTimeOrder,
-        endTime: endTimeOrder,
-        minPercentageToAsk: constants.Zero,
-        params: defaultAbiCoder.encode(["uint256"], [parseEther("5")]), // startPrice
-        signerUser: takerBidUser,
-        verifyingContract: looksRareExchange.address,
-      });
-
-      await expect(
-        looksRareExchange.connect(makerAskUser).matchBidWithTakerAsk(takerAskOrder, makerBidOrder)
-      ).to.be.revertedWith("Strategy: Execution invalid");
-    });
-
     it("CurrencyManager/ExecutionManager - Revertions work as expected", async () => {
       await expect(currencyManager.connect(admin).addCurrency(weth.address)).to.be.revertedWith(
         "Currency: Already whitelisted"
@@ -2822,17 +2168,6 @@ describe("LooksRare Exchange", () => {
           .transferNonFungibleToken(mockERC721.address, accounts[1].address, accounts[5].address, "0", "1")
       ).to.be.revertedWith("Transfer: Only LooksRare Exchange");
     });
-
-    it("Dutch auction - Min Auction length creates revertion as expected", async () => {
-      await expect(strategyDutchAuction.connect(admin).updateMinimumAuctionLength("899")).to.be.revertedWith(
-        "Owner: Auction length must be > 15 min"
-      );
-
-      const StrategyDutchAuction = await ethers.getContractFactory("StrategyDutchAuction");
-      await expect(StrategyDutchAuction.connect(admin).deploy("900", "899")).to.be.revertedWith(
-        "Owner: Auction length must be > 15 min"
-      );
-    });
   });
 
   describe("#6 - Owner functions and access rights", async () => {
@@ -2866,11 +2201,6 @@ describe("LooksRare Exchange", () => {
 
       tx = await looksRareExchange.connect(admin).updateProtocolFeeRecipient(admin.address);
       await expect(tx).to.emit(looksRareExchange, "NewProtocolFeeRecipient").withArgs(admin.address);
-    });
-
-    it("DutchAuction - Owner functions work as expected", async () => {
-      const tx = await strategyDutchAuction.connect(admin).updateMinimumAuctionLength("1000");
-      await expect(tx).to.emit(strategyDutchAuction, "NewMinimumAuctionLengthInSeconds").withArgs("1000");
     });
 
     it("TransferSelector - Owner revertions work as expected", async () => {
@@ -2973,14 +2303,6 @@ describe("LooksRare Exchange", () => {
       await expect(
         transferSelectorNFT.connect(notAdminUser).removeCollectionTransferManager(mockERC721WithRoyalty.address)
       ).to.be.revertedWith("Ownable: caller is not the owner");
-    });
-
-    it("DutchAuction - Owner functions are only callable by owner", async () => {
-      const notAdminUser = accounts[3];
-
-      await expect(strategyDutchAuction.connect(notAdminUser).updateMinimumAuctionLength("500")).to.be.revertedWith(
-        "Ownable: caller is not the owner"
-      );
     });
   });
 
