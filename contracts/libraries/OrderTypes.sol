@@ -3,7 +3,7 @@ pragma solidity ^0.8.0;
 
 /**
  * @title OrderTypes
- * @notice This library contains order types for the LooksRare exchange.
+ * @notice This library contains order types for the EarthRare exchange.
  */
 library OrderTypes {
     // keccak256("MakerOrder(bool isOrderAsk,address signer,address collection,uint256 price,uint256 tokenId,uint256 amount,address strategy,address currency,uint256 nonce,uint256 startTime,uint256 endTime,uint256 minPercentageToAsk,bytes params)")

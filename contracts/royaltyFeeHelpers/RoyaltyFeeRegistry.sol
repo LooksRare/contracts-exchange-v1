@@ -7,7 +7,7 @@ import {IRoyaltyFeeRegistry} from "../interfaces/IRoyaltyFeeRegistry.sol";
 
 /**
  * @title RoyaltyFeeRegistry
- * @notice It is a royalty fee registry for the LooksRare exchange.
+ * @notice It is a royalty fee registry for the EarthRare exchange.
  */
 contract RoyaltyFeeRegistry is IRoyaltyFeeRegistry, Ownable {
     struct FeeInfo {
