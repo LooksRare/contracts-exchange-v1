@@ -88,7 +88,7 @@ describe("Strategy - AnyItemInASetForFixedPrice ('Trait orders')", () => {
     endTimeOrder = startTimeOrder.add(BigNumber.from("1000"));
   });
 
-  it("ERC721 - MakerAsk order is matched by TakerBid order", async () => {
+  it("ERC721 - MakerBid order is matched by TakerAsk order", async () => {
     const takerAskUser = accounts[3]; // has tokenId=2
     const makerBidUser = accounts[1];
 
