@@ -5,9 +5,10 @@ import {OrderTypes} from "../libraries/OrderTypes.sol";
 import {IExecutionStrategy} from "../interfaces/IExecutionStrategy.sol";
 
 /**
- * @title StrategyStandardSaleForFixedPrice
+ * @title StrategyPartialSaleForFixedPrice
  * @notice Strategy that executes an order at a fixed price that
  * can be taken either by a bid or an ask.
+ * Partial means that a taker can buy/sell a partial amount.
  */
 contract StrategyPartialSaleForFixedPrice is IExecutionStrategy {
     uint256 public immutable PROTOCOL_FEE;
@@ -66,9 +67,6 @@ contract StrategyPartialSaleForFixedPrice is IExecutionStrategy {
         )
     {
         uint256 takerBidAmount = abi.decode(takerBid.params, (uint256));
-        if (takerBidAmount == 0) {
-            return (false, makerAsk.tokenId, takerBidAmount);
-        }
         return (
             (_verifyPrice(makerAsk.price, makerAsk.amount, takerBid.price, takerBidAmount) &&
                 (makerAsk.tokenId == takerBid.tokenId) &&
@@ -85,7 +83,7 @@ contract StrategyPartialSaleForFixedPrice is IExecutionStrategy {
      * @dev checks that askPrice/askAmount <= bidPrice/bidAmount
      * which is askPrice * bidAmount <= bidPrice * askAmount
      * note that these are uint256 * uint256 = uint512
-     * the function supports overflows and extreme values
+     * the function supports uint256 overflows and extreme values
      * a lot of low level arithmetics
      */
     function _verifyPrice(

@@ -75,6 +75,8 @@ contract LooksRareExchange is ILooksRareExchange, ReentrancyGuard, Ownable {
 
     mapping(address => uint256) public userMinOrderNonce;
     // maker => nonce => amount
+    // it is an executed amount
+    // amount == type(uint256).max means that an offer was cancelled or fully executed
     mapping(address => mapping(uint256 => uint256)) private _isUserOrderNonceExecutedOrCancelled;
 
     event CancelAllOrders(address indexed user, uint256 newMinNonce);
@@ -430,6 +432,16 @@ contract LooksRareExchange is ILooksRareExchange, ReentrancyGuard, Ownable {
      */
     function isUserOrderNonceExecutedOrCancelled(address user, uint256 orderNonce) external view returns (bool) {
         return _isUserOrderNonceExecutedOrCancelled[user][orderNonce] == type(uint256).max;
+    }
+
+    /**
+     * @notice Check an executed/used amount of an order.
+     * type(uint256).max means that the order was cancelled or fully used.
+     * @param user address of user
+     * @param orderNonce nonce of the order
+     */
+    function executedAmount(address user, uint256 orderNonce) external view returns (uint256) {
+        return _isUserOrderNonceExecutedOrCancelled[user][orderNonce];
     }
 
     /**
