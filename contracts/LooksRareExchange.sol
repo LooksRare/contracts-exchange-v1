@@ -74,7 +74,8 @@ contract LooksRareExchange is ILooksRareExchange, ReentrancyGuard, Ownable {
     ITransferSelectorNFT public transferSelectorNFT;
 
     mapping(address => uint256) public userMinOrderNonce;
-    mapping(address => mapping(uint256 => bool)) private _isUserOrderNonceExecutedOrCancelled;
+    // maker => nonce => amount
+    mapping(address => mapping(uint256 => uint256)) private _isUserOrderNonceExecutedOrCancelled;
 
     event CancelAllOrders(address indexed user, uint256 newMinNonce);
     event CancelMultipleOrders(address indexed user, uint256[] orderNonces);
@@ -172,7 +173,7 @@ contract LooksRareExchange is ILooksRareExchange, ReentrancyGuard, Ownable {
 
         for (uint256 i = 0; i < orderNonces.length; i++) {
             require(orderNonces[i] >= userMinOrderNonce[msg.sender], "Cancel: Order nonce lower than current");
-            _isUserOrderNonceExecutedOrCancelled[msg.sender][orderNonces[i]] = true;
+            _isUserOrderNonceExecutedOrCancelled[msg.sender][orderNonces[i]] = type(uint256).max;
         }
 
         emit CancelMultipleOrders(msg.sender, orderNonces);
@@ -209,10 +210,17 @@ contract LooksRareExchange is ILooksRareExchange, ReentrancyGuard, Ownable {
         (bool isExecutionValid, uint256 tokenId, uint256 amount) = IExecutionStrategy(makerAsk.strategy)
             .canExecuteTakerBid(takerBid, makerAsk);
 
-        require(isExecutionValid, "Strategy: Execution invalid");
+        unchecked {
+            require(isExecutionValid, "Strategy: Execution invalid");
+            uint256 newUsedAmount = _isUserOrderNonceExecutedOrCancelled[makerAsk.signer][makerAsk.nonce] + amount;
+            require(newUsedAmount >= amount, "Strategy: Execution invalid");
+            require(makerAsk.amount >= newUsedAmount, "Strategy: Execution invalid");
 
-        // Update maker ask order status to true (prevents replay)
-        _isUserOrderNonceExecutedOrCancelled[makerAsk.signer][makerAsk.nonce] = true;
+            // Update maker ask order status to true (prevents replay)
+            _isUserOrderNonceExecutedOrCancelled[makerAsk.signer][makerAsk.nonce] = makerAsk.amount == newUsedAmount
+                ? type(uint256).max
+                : newUsedAmount;
+        }
 
         // Execution part 1/2
         _transferFeesAndFundsWithWETH(
@@ -263,8 +271,16 @@ contract LooksRareExchange is ILooksRareExchange, ReentrancyGuard, Ownable {
 
         require(isExecutionValid, "Strategy: Execution invalid");
 
-        // Update maker ask order status to true (prevents replay)
-        _isUserOrderNonceExecutedOrCancelled[makerAsk.signer][makerAsk.nonce] = true;
+        unchecked {
+            uint256 newUsedAmount = _isUserOrderNonceExecutedOrCancelled[makerAsk.signer][makerAsk.nonce] + amount;
+            require(newUsedAmount >= amount, "Strategy: Execution invalid");
+            require(makerAsk.amount >= newUsedAmount, "Strategy: Execution invalid");
+
+            // Update maker ask order status to true (prevents replay)
+            _isUserOrderNonceExecutedOrCancelled[makerAsk.signer][makerAsk.nonce] = makerAsk.amount == newUsedAmount
+                ? type(uint256).max
+                : newUsedAmount;
+        }
 
         // Execution part 1/2
         _transferFeesAndFunds(
@@ -317,8 +333,16 @@ contract LooksRareExchange is ILooksRareExchange, ReentrancyGuard, Ownable {
 
         require(isExecutionValid, "Strategy: Execution invalid");
 
-        // Update maker bid order status to true (prevents replay)
-        _isUserOrderNonceExecutedOrCancelled[makerBid.signer][makerBid.nonce] = true;
+        unchecked {
+            uint256 newUsedAmount = _isUserOrderNonceExecutedOrCancelled[makerBid.signer][makerBid.nonce] + amount;
+            require(newUsedAmount >= amount, "Strategy: Excessive amount"); // overflow check
+            require(makerBid.amount >= newUsedAmount, "Strategy: Excessive amount");
+
+            // Update maker bid order status to true (prevents replay)
+            _isUserOrderNonceExecutedOrCancelled[makerBid.signer][makerBid.nonce] = makerBid.amount == newUsedAmount
+                ? type(uint256).max
+                : newUsedAmount;
+        }
 
         // Execution part 1/2
         _transferNonFungibleToken(makerBid.collection, msg.sender, makerBid.signer, tokenId, amount);
@@ -405,7 +429,7 @@ contract LooksRareExchange is ILooksRareExchange, ReentrancyGuard, Ownable {
      * @param orderNonce nonce of the order
      */
     function isUserOrderNonceExecutedOrCancelled(address user, uint256 orderNonce) external view returns (bool) {
-        return _isUserOrderNonceExecutedOrCancelled[user][orderNonce];
+        return _isUserOrderNonceExecutedOrCancelled[user][orderNonce] == type(uint256).max;
     }
 
     /**
@@ -562,7 +586,7 @@ contract LooksRareExchange is ILooksRareExchange, ReentrancyGuard, Ownable {
     function _validateOrder(OrderTypes.MakerOrder calldata makerOrder, bytes32 orderHash) internal view {
         // Verify whether order nonce has expired
         require(
-            (!_isUserOrderNonceExecutedOrCancelled[makerOrder.signer][makerOrder.nonce]) &&
+            (_isUserOrderNonceExecutedOrCancelled[makerOrder.signer][makerOrder.nonce] < type(uint256).max) &&
                 (makerOrder.nonce >= userMinOrderNonce[makerOrder.signer]),
             "Order: Matching order expired"
         );

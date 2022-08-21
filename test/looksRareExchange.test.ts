@@ -74,6 +74,7 @@ describe("LooksRare Exchange", () => {
       royaltyFeeRegistry,
       royaltyFeeManager,
       royaltyFeeSetter,
+      ,
     ] = await setUp(admin, feeRecipient, royaltyCollector, standardProtocolFee, royaltyFeeLimit);
 
     await tokenSetUp(
@@ -2325,14 +2326,14 @@ describe("LooksRare Exchange", () => {
 
     it("ExecutionManager - View functions work as expected", async () => {
       const numberStrategies = await executionManager.viewCountWhitelistedStrategies();
-      assert.equal(numberStrategies.toString(), "5");
+      assert.equal(numberStrategies.toString(), "6");
 
       let tx = await executionManager.viewWhitelistedStrategies("0", "2");
       assert.equal(tx[0].length, 2);
       assert.deepEqual(BigNumber.from(tx[1].toString()), constants.Two);
 
       tx = await executionManager.viewWhitelistedStrategies("2", "100");
-      assert.equal(tx[0].length, 3);
+      assert.equal(tx[0].length, 4);
       assert.deepEqual(BigNumber.from(tx[1].toString()), BigNumber.from(numberStrategies.toString()));
     });
   });

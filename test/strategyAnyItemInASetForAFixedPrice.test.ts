@@ -67,6 +67,7 @@ describe("Strategy - AnyItemInASetForFixedPrice ('Trait orders')", () => {
       ,
       ,
       ,
+      ,
     ] = await setUp(admin, feeRecipient, royaltyCollector, standardProtocolFee, royaltyFeeLimit);
 
     await tokenSetUp(

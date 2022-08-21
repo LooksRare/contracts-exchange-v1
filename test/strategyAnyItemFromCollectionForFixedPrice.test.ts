@@ -64,6 +64,7 @@ describe("Strategy - AnyItemFromCollectionForFixedPrice ('Collection orders')", 
       ,
       ,
       ,
+      ,
     ] = await setUp(admin, feeRecipient, royaltyCollector, standardProtocolFee, royaltyFeeLimit);
 
     await tokenSetUp(

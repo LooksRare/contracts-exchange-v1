@@ -64,6 +64,7 @@ describe("Strategy - PrivateSale", () => {
       ,
       ,
       ,
+      ,
     ] = await setUp(admin, feeRecipient, royaltyCollector, standardProtocolFee, royaltyFeeLimit);
 
     await tokenSetUp(
