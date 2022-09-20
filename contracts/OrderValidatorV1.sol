@@ -9,9 +9,9 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC165, IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {IERC1155} from "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
 
-// LooksRare libraries
-import "./libraries/ValidationCodeConstants.sol";
+// LooksRare libraries and validation code constants
 import {OrderTypes} from "./libraries/OrderTypes.sol";
+import "./libraries/ValidationCodeConstants.sol";
 
 // LooksRare interfaces
 import {ICurrencyManager} from "./interfaces/ICurrencyManager.sol";
@@ -25,6 +25,7 @@ import {ITransferSelectorNFT} from "./interfaces/ITransferSelectorNFT.sol";
 // LooksRareExchange
 import {LooksRareExchange} from "./LooksRareExchange.sol";
 
+// @dev Extended interfaces
 interface IRoyaltyFeeManagerExtended is IRoyaltyFeeManager {
     function royaltyFeeRegistry() external view returns (IRoyaltyFeeRegistry);
 }
@@ -34,17 +35,20 @@ interface ITransferSelectorNFTExtended is ITransferSelectorNFT {
 }
 
 /**
- * OrderValidatorV1
+ * @title OrderValidatorV1
  */
 contract OrderValidatorV1 {
     using OrderTypes for OrderTypes.MakerOrder;
 
     // TransferManager ERC721
     address public constant TRANSFER_MANAGER_ERC721 = 0xf42aa99F011A1fA7CDA90E5E98b277E306BcA83e;
+
     // TransferManager ERC1155
     address public constant TRANSFER_MANAGER_ERC1155 = 0xFED24eC7E22f573c2e08AEF55aA6797Ca2b3A051;
+
     // ERC721 interfaceID
     bytes4 public constant INTERFACE_ID_ERC721 = 0x80ac58cd;
+
     // ERC1155 interfaceID
     bytes4 public constant INTERFACE_ID_ERC1155 = 0xd9b67a26;
 
@@ -54,23 +58,30 @@ contract OrderValidatorV1 {
     // LooksRare Exchange
     LooksRareExchange public immutable looksRareExchange;
 
+    // Currency Manager
     ICurrencyManager public currencyManager;
+
+    // Execution Manager
     IExecutionManager public executionManager;
+
+    // Transfer Selector
     ITransferSelectorNFTExtended public transferSelectorNFT;
+
+    // Royalty Fee Registry
     IRoyaltyFeeRegistry public royaltyFeeRegistry;
 
     /**
      * @notice Constructor
      * @param _looksRareExchange address of the LooksRare exchange (v1)
-     * @param _looksRareDomainSeparator domain separator for LooksRare exchange (v1)
      */
-    constructor(address _looksRareExchange, bytes32 _looksRareDomainSeparator) {
+    constructor(address _looksRareExchange) {
         looksRareExchange = LooksRareExchange(_looksRareExchange);
-        _DOMAIN_SEPARATOR = _looksRareDomainSeparator;
+        _DOMAIN_SEPARATOR = LooksRareExchange(_looksRareExchange).DOMAIN_SEPARATOR();
     }
 
     /**
-     * @notice Update peripheral contract addresses
+     * @notice Update peripheral contract addresses (CurrencyManager, ExecutionManager, TransferSelectorNFT, RoyaltyFeeRegistry)
+     * @dev This function can be called by anyone.
      */
     function updatePeripheralContractAddresses() external {
         currencyManager = looksRareExchange.currencyManager();
@@ -83,37 +94,75 @@ contract OrderValidatorV1 {
     }
 
     /**
-     * @notice Verify the validity of the maker order
+     * @notice Check the validity of a maker order
      * @param makerOrder maker order struct
      * @return validationCode validation code for the order
      */
-    function validateOrder(OrderTypes.MakerOrder calldata makerOrder) external view returns (uint256 validationCode) {
-        validationCode = validateNonces(makerOrder);
-        validationCode = validateAmounts(makerOrder);
-        validationCode = validateSignature(makerOrder);
-        validationCode = validateWhitelists(makerOrder);
-        validationCode = validateMinPercentageToAsk(makerOrder);
-        validationCode = validateTimestamps(makerOrder);
-        validationCode = validateApprovalsAndBalances(makerOrder);
+    function checkOrderValidity(OrderTypes.MakerOrder calldata makerOrder)
+        external
+        view
+        returns (uint256 validationCode)
+    {
+        uint256 response = checkValidityNonces(makerOrder);
+        if (response != ORDER_EXPECTED_TO_BE_VALID) return response;
+        response = checkValidityAmounts(makerOrder);
+        if (response != ORDER_EXPECTED_TO_BE_VALID) return response;
+        response = checkValiditySignature(makerOrder);
+        if (response != ORDER_EXPECTED_TO_BE_VALID) return response;
+        response = checkValidityWhitelists(makerOrder);
+        if (response != ORDER_EXPECTED_TO_BE_VALID) return response;
+        response = checkValidityMinPercentageToAsk(makerOrder);
+        if (response != ORDER_EXPECTED_TO_BE_VALID) return response;
+        response = checkValidityTimestamps(makerOrder);
+        if (response != ORDER_EXPECTED_TO_BE_VALID) return response;
+        response = checkValidityApprovalsAndBalances(makerOrder);
+        if (response != ORDER_EXPECTED_TO_BE_VALID) return response;
     }
 
-    function validateNonces(OrderTypes.MakerOrder calldata makerOrder) public view returns (uint256 validationCode) {
+    /**
+     * @notice Check validity of nonces
+     * @param makerOrder maker order struct
+     * @return validationCode validation code
+     */
+    function checkValidityNonces(OrderTypes.MakerOrder calldata makerOrder)
+        public
+        view
+        returns (uint256 validationCode)
+    {
         if (looksRareExchange.isUserOrderNonceExecutedOrCancelled(makerOrder.signer, makerOrder.nonce))
             return NONCE_EXECUTED_OR_CANCELLED;
         if (makerOrder.nonce < looksRareExchange.userMinOrderNonce(makerOrder.signer))
             return NONCE_BELOW_MIN_ORDER_NONCE;
     }
 
-    function validateAmounts(OrderTypes.MakerOrder calldata makerOrder) public pure returns (uint256 validationCode) {
+    /**
+     * @notice Check validity of amounts
+     * @param makerOrder maker order struct
+     * @return validationCode validation code
+     */
+    function checkValidityAmounts(OrderTypes.MakerOrder calldata makerOrder)
+        public
+        pure
+        returns (uint256 validationCode)
+    {
         if (makerOrder.amount == 0) return ORDER_AMOUNT_CANNOT_BE_NULL;
     }
 
-    function validateSignature(OrderTypes.MakerOrder calldata makerOrder) public view returns (uint256 validationCode) {
+    /**
+     * @notice Check validity of a signature
+     * @param makerOrder maker order struct
+     * @return validationCode validation code
+     */
+    function checkValiditySignature(OrderTypes.MakerOrder calldata makerOrder)
+        public
+        view
+        returns (uint256 validationCode)
+    {
         if (makerOrder.signer == address(0)) return MAKER_SIGNER_IS_NULL_SIGNER;
 
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _DOMAIN_SEPARATOR, makerOrder.hash()));
 
-        if (Address.isContract(makerOrder.signer)) {
+        if (!Address.isContract(makerOrder.signer)) {
             uint256 response = _validateEOA(digest, makerOrder.signer, makerOrder.v, makerOrder.r, makerOrder.s);
             if (response != ORDER_EXPECTED_TO_BE_VALID) return response;
         } else {
@@ -122,7 +171,12 @@ contract OrderValidatorV1 {
         }
     }
 
-    function validateWhitelists(OrderTypes.MakerOrder calldata makerOrder)
+    /**
+     * @notice Check validity of whitelists
+     * @param makerOrder maker order struct
+     * @return validationCode validation code
+     */
+    function checkValidityWhitelists(OrderTypes.MakerOrder calldata makerOrder)
         public
         view
         returns (uint256 validationCode)
@@ -134,7 +188,12 @@ contract OrderValidatorV1 {
         if (!executionManager.isStrategyWhitelisted(makerOrder.strategy)) return STRATEGY_NOT_WHITELISTED;
     }
 
-    function validateMinPercentageToAsk(OrderTypes.MakerOrder calldata makerOrder)
+    /**
+     * @notice Check validity of min percentage to ask
+     * @param makerOrder maker order struct
+     * @return validationCode validation code
+     */
+    function checkValidityMinPercentageToAsk(OrderTypes.MakerOrder calldata makerOrder)
         public
         view
         returns (uint256 validationCode)
@@ -176,7 +235,12 @@ contract OrderValidatorV1 {
         }
     }
 
-    function validateTimestamps(OrderTypes.MakerOrder calldata makerOrder)
+    /**
+     * @notice Check validity of order timestamps
+     * @param makerOrder maker order struct
+     * @return validationCode validation code
+     */
+    function checkValidityTimestamps(OrderTypes.MakerOrder calldata makerOrder)
         public
         view
         returns (uint256 validationCode)
@@ -185,7 +249,12 @@ contract OrderValidatorV1 {
         if (makerOrder.endTime < block.timestamp) return TOO_LATE_TO_EXECUTE_ORDER;
     }
 
-    function validateApprovalsAndBalances(OrderTypes.MakerOrder calldata makerOrder)
+    /**
+     * @notice Check validity of approvals and balances
+     * @param makerOrder maker order struct
+     * @return validationCode validation code
+     */
+    function checkValidityApprovalsAndBalances(OrderTypes.MakerOrder calldata makerOrder)
         public
         view
         returns (uint256 validationCode)
@@ -204,6 +273,13 @@ contract OrderValidatorV1 {
         }
     }
 
+    /**
+     * @notice Check validity of NFT approvals and balances
+     * @param collection address of the collection
+     * @param user address of the user
+     * @param tokenId tokenId
+     * @param amount amount
+     */
     function _validateNFTApprovals(
         address collection,
         address user,
@@ -211,6 +287,7 @@ contract OrderValidatorV1 {
         uint256 amount
     ) internal view returns (uint256 validationCode) {
         address transferManager;
+
         if (IERC165(collection).supportsInterface(INTERFACE_ID_ERC721)) {
             transferManager = TRANSFER_MANAGER_ERC721;
         } else if (IERC165(collection).supportsInterface(INTERFACE_ID_ERC1155)) {
@@ -230,6 +307,12 @@ contract OrderValidatorV1 {
         }
     }
 
+    /**
+     * @notice Check validity of ERC20 approvals and balances required to process the order
+     * @param currency address of the currency
+     * @param user address of the user
+     * @param price price
+     */
     function _validateERC20(
         address currency,
         address user,
@@ -240,6 +323,13 @@ contract OrderValidatorV1 {
         if ((IERC20(currency).balanceOf(user)) < price) return ERC20_BALANCE_INFERIOR_TO_AMOUNT;
     }
 
+    /**
+     * @notice Check validity of ERC721 approvals and balances required to process the order
+     * @param collection address of the collection
+     * @param user address of the user
+     * @param transferManager address of the transfer manager
+     * @param tokenId tokenId
+     */
     function _validateERC721AndEquivalents(
         address collection,
         address user,
@@ -253,6 +343,14 @@ contract OrderValidatorV1 {
         if ((IERC721(collection).ownerOf(tokenId)) != user) return ERC721_TOKEN_ID_NOT_IN_BALANCE;
     }
 
+    /**
+     * @notice Check validity of ERC1155 approvals and balances required to process the order
+     * @param collection address of the collection
+     * @param user address of the user
+     * @param transferManager address of the transfer manager
+     * @param tokenId tokenId
+     * @param amount amount
+     */
     function _validateERC1155(
         address collection,
         address user,
@@ -267,7 +365,7 @@ contract OrderValidatorV1 {
     }
 
     /**
-     * @notice Validate EOA maker order
+     * @notice Check validity of EOA maker order
      * @param digest digest
      * @param targetSigner the signer address to confirm message validity
      * @param v parameter (27 or 28). This prevents maleability since the public key recovery equation has two possible solutions.
@@ -292,7 +390,7 @@ contract OrderValidatorV1 {
     }
 
     /**
-     * @notice Validate ERC-1271 maker order
+     * @notice Check validity of ERC-1271 maker order
      * @param digest digest
      * @param targetSigner the signer address to confirm message validity
      * @param v parameter (27 or 28)
