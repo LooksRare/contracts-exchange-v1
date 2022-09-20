@@ -10,29 +10,19 @@ import {IERC165, IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol
 import {IERC1155} from "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
 
 // LooksRare libraries and validation code constants
-import {OrderTypes} from "./libraries/OrderTypes.sol";
-import "./libraries/ValidationCodeConstants.sol";
+import {OrderTypes} from "../libraries/OrderTypes.sol";
+import "./ValidationCodeConstants.sol";
 
 // LooksRare interfaces
-import {ICurrencyManager} from "./interfaces/ICurrencyManager.sol";
-import {IExecutionManager} from "./interfaces/IExecutionManager.sol";
-import {IExecutionStrategy} from "./interfaces/IExecutionStrategy.sol";
-import {IRoyaltyFeeRegistry} from "./interfaces/IRoyaltyFeeRegistry.sol";
-import {IRoyaltyFeeManager} from "./interfaces/IRoyaltyFeeManager.sol";
-import {ITransferManagerNFT} from "./interfaces/ITransferManagerNFT.sol";
-import {ITransferSelectorNFT} from "./interfaces/ITransferSelectorNFT.sol";
+import {ICurrencyManager} from "../interfaces/ICurrencyManager.sol";
+import {IExecutionManager} from "../interfaces/IExecutionManager.sol";
+import {IExecutionStrategy} from "../interfaces/IExecutionStrategy.sol";
+import {IRoyaltyFeeRegistry} from "../interfaces/IRoyaltyFeeRegistry.sol";
+import {ITransferManagerNFT} from "../interfaces/ITransferManagerNFT.sol";
+import {ITransferSelectorNFTExtended, IRoyaltyFeeManagerExtended} from "./ExtendedInterfaces.sol";
 
 // LooksRareExchange
-import {LooksRareExchange} from "./LooksRareExchange.sol";
-
-// @dev Extended interfaces
-interface IRoyaltyFeeManagerExtended is IRoyaltyFeeManager {
-    function royaltyFeeRegistry() external view returns (IRoyaltyFeeRegistry);
-}
-
-interface ITransferSelectorNFTExtended is ITransferSelectorNFT {
-    function transferManagerSelectorForCollection(address collection) external view returns (address);
-}
+import {LooksRareExchange} from "../LooksRareExchange.sol";
 
 /**
  * @title OrderValidatorV1
@@ -40,17 +30,17 @@ interface ITransferSelectorNFTExtended is ITransferSelectorNFT {
 contract OrderValidatorV1 {
     using OrderTypes for OrderTypes.MakerOrder;
 
-    // TransferManager ERC721
-    address public constant TRANSFER_MANAGER_ERC721 = 0xf42aa99F011A1fA7CDA90E5E98b277E306BcA83e;
-
-    // TransferManager ERC1155
-    address public constant TRANSFER_MANAGER_ERC1155 = 0xFED24eC7E22f573c2e08AEF55aA6797Ca2b3A051;
-
     // ERC721 interfaceID
     bytes4 public constant INTERFACE_ID_ERC721 = 0x80ac58cd;
 
     // ERC1155 interfaceID
     bytes4 public constant INTERFACE_ID_ERC1155 = 0xd9b67a26;
+
+    // TransferManager ERC721
+    address public immutable TRANSFER_MANAGER_ERC721;
+
+    // TransferManager ERC1155
+    address public immutable TRANSFER_MANAGER_ERC1155;
 
     // Domain separator from LooksRare Exchange
     bytes32 public immutable _DOMAIN_SEPARATOR;
@@ -77,6 +67,14 @@ contract OrderValidatorV1 {
     constructor(address _looksRareExchange) {
         looksRareExchange = LooksRareExchange(_looksRareExchange);
         _DOMAIN_SEPARATOR = LooksRareExchange(_looksRareExchange).DOMAIN_SEPARATOR();
+
+        TRANSFER_MANAGER_ERC721 = ITransferSelectorNFTExtended(
+            address(LooksRareExchange(_looksRareExchange).transferSelectorNFT())
+        ).TRANSFER_MANAGER_ERC721();
+
+        TRANSFER_MANAGER_ERC1155 = ITransferSelectorNFTExtended(
+            address(LooksRareExchange(_looksRareExchange).transferSelectorNFT())
+        ).TRANSFER_MANAGER_ERC1155();
     }
 
     /**
@@ -199,10 +197,10 @@ contract OrderValidatorV1 {
         returns (uint256 validationCode)
     {
         // Return if order is bid since there is no protection for minPercentageToAsk
-        if (!makerOrder.isOrderAsk) return validationCode;
+        if (!makerOrder.isOrderAsk) return ORDER_EXPECTED_TO_BE_VALID;
 
         uint256 finalSellerAmount = makerOrder.price;
-        uint256 protocolFee = makerOrder.price * IExecutionStrategy(makerOrder.strategy).viewProtocolFee();
+        uint256 protocolFee = (makerOrder.price * IExecutionStrategy(makerOrder.strategy).viewProtocolFee()) / 10000;
         finalSellerAmount -= protocolFee;
 
         if ((finalSellerAmount * 10000) < (makerOrder.minPercentageToAsk * makerOrder.price))
