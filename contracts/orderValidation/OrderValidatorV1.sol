@@ -219,15 +219,20 @@ contract OrderValidatorV1 {
         } else {
             // ERC2981 logic
             if (IERC165(makerOrder.collection).supportsInterface(0x2a55205a)) {
-                (receiver, royaltyAmount) = IERC2981(makerOrder.collection).royaltyInfo(
-                    makerOrder.tokenId,
-                    makerOrder.price
+                (bool answer, bytes memory data) = makerOrder.collection.staticcall(
+                    abi.encodeWithSelector(IERC2981.royaltyInfo.selector, makerOrder.tokenId, makerOrder.price)
                 );
+
+                if (!answer) {
+                    return MISSING_ROYALTY_INFO_FUNCTION_ERC2981;
+                } else {
+                    (, royaltyAmount) = abi.decode(data, (address, uint256));
+                }
 
                 if (receiver != address(0)) {
                     finalSellerAmount -= royaltyAmount;
                     if ((finalSellerAmount * 10000) < (makerOrder.minPercentageToAsk * makerOrder.price))
-                        return MIN_NET_RATIO_ABOVE_ROYALTY_FEE_EIP2981_AND_PROTOCOL_FEE;
+                        return MIN_NET_RATIO_ABOVE_ROYALTY_FEE_ERC2981_AND_PROTOCOL_FEE;
                 }
             }
         }
@@ -334,8 +339,27 @@ contract OrderValidatorV1 {
         address transferManager,
         uint256 tokenId
     ) internal view returns (uint256 validationCode) {
-        bool isApprovedSingle = IERC721(collection).getApproved(tokenId) == transferManager;
-        bool isApprovedAll = IERC721(collection).isApprovedForAll(user, transferManager);
+        (bool answer, bytes memory data) = collection.staticcall(
+            abi.encodeWithSelector(IERC721.getApproved.selector, tokenId)
+        );
+
+        address approvedAddress;
+
+        if (answer) {
+            approvedAddress = abi.decode(data, (address));
+        }
+
+        bool isApprovedSingle = approvedAddress == transferManager;
+
+        (answer, data) = collection.staticcall(
+            abi.encodeWithSelector(IERC721.isApprovedForAll.selector, user, transferManager)
+        );
+
+        bool isApprovedAll;
+
+        if (answer) {
+            isApprovedAll = abi.decode(data, (bool));
+        }
 
         if (!isApprovedAll && !isApprovedSingle) return ERC721_NO_APPROVAL_FOR_ALL_OR_TOKEN_ID;
         if ((IERC721(collection).ownerOf(tokenId)) != user) return ERC721_TOKEN_ID_NOT_IN_BALANCE;
@@ -402,8 +426,14 @@ contract OrderValidatorV1 {
         bytes32 r,
         bytes32 s
     ) internal view returns (uint256 validationCode) {
+        (bool answer, bytes memory data) = targetSigner.staticcall(
+            abi.encodePacked(IERC1271.isValidSignature.selector, digest, abi.encodePacked(r, s, v))
+        );
+
+        if (!answer) return MISSING_IS_VALID_SIGNATURE_FUNCTION_EIP1271;
+        bytes4 magicValue = abi.decode(data, (bytes4));
+
         // 0x1626ba7e is the interfaceId for signature contracts (see IERC1271)
-        if (IERC1271(targetSigner).isValidSignature(digest, abi.encodePacked(r, s, v)) == 0x1626ba7e)
-            return SIGNATURE_INVALID_ERC_1271;
+        if (magicValue != 0x1626ba7e) return SIGNATURE_INVALID_EIP1271;
     }
 }
