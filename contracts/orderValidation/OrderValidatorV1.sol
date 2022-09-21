@@ -427,7 +427,7 @@ contract OrderValidatorV1 {
         bytes32 s
     ) internal view returns (uint256 validationCode) {
         (bool answer, bytes memory data) = targetSigner.staticcall(
-            abi.encodePacked(IERC1271.isValidSignature.selector, digest, abi.encodePacked(r, s, v))
+            abi.encodeWithSelector(IERC1271.isValidSignature.selector, digest, abi.encodePacked(r, s, v))
         );
 
         if (!answer) return MISSING_IS_VALID_SIGNATURE_FUNCTION_EIP1271;
