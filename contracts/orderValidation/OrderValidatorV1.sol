@@ -36,6 +36,12 @@ contract OrderValidatorV1 {
     // ERC1155 interfaceID
     bytes4 public constant INTERFACE_ID_ERC1155 = 0xd9b67a26;
 
+    // ERC2981 interfaceId
+    bytes4 public constant INTERFACE_ID_ERC2981 = 0x2a55205a;
+
+    // EIP1271 magic value
+    bytes4 public constant MAGIC_VALUE_EIP1271 = 0x1626ba7e;
+
     // TransferManager ERC721
     address public immutable TRANSFER_MANAGER_ERC721;
 
@@ -45,20 +51,20 @@ contract OrderValidatorV1 {
     // Domain separator from LooksRare Exchange
     bytes32 public immutable _DOMAIN_SEPARATOR;
 
+    // Currency Manager
+    ICurrencyManager public immutable currencyManager;
+
+    // Execution Manager
+    IExecutionManager public immutable executionManager;
+
     // LooksRare Exchange
     LooksRareExchange public immutable looksRareExchange;
 
-    // Currency Manager
-    ICurrencyManager public currencyManager;
-
-    // Execution Manager
-    IExecutionManager public executionManager;
-
     // Transfer Selector
-    ITransferSelectorNFTExtended public transferSelectorNFT;
+    ITransferSelectorNFTExtended public immutable transferSelectorNFT;
 
     // Royalty Fee Registry
-    IRoyaltyFeeRegistry public royaltyFeeRegistry;
+    IRoyaltyFeeRegistry public immutable royaltyFeeRegistry;
 
     /**
      * @notice Constructor
@@ -75,18 +81,14 @@ contract OrderValidatorV1 {
         TRANSFER_MANAGER_ERC1155 = ITransferSelectorNFTExtended(
             address(LooksRareExchange(_looksRareExchange).transferSelectorNFT())
         ).TRANSFER_MANAGER_ERC1155();
-    }
 
-    /**
-     * @notice Update peripheral contract addresses (CurrencyManager, ExecutionManager, TransferSelectorNFT, RoyaltyFeeRegistry)
-     * @dev This function can be called by anyone.
-     */
-    function updatePeripheralContractAddresses() external {
-        currencyManager = looksRareExchange.currencyManager();
-        executionManager = looksRareExchange.executionManager();
-        transferSelectorNFT = ITransferSelectorNFTExtended(address(looksRareExchange.transferSelectorNFT()));
+        currencyManager = LooksRareExchange(_looksRareExchange).currencyManager();
+        executionManager = LooksRareExchange(_looksRareExchange).executionManager();
+        transferSelectorNFT = ITransferSelectorNFTExtended(
+            address(LooksRareExchange(_looksRareExchange).transferSelectorNFT())
+        );
         IRoyaltyFeeManagerExtended royaltyFeeManager = IRoyaltyFeeManagerExtended(
-            address(looksRareExchange.royaltyFeeManager())
+            address(LooksRareExchange(_looksRareExchange).royaltyFeeManager())
         );
         royaltyFeeRegistry = royaltyFeeManager.royaltyFeeRegistry();
     }
@@ -143,7 +145,7 @@ contract OrderValidatorV1 {
         pure
         returns (uint256 validationCode)
     {
-        if (makerOrder.amount == 0) return ORDER_AMOUNT_CANNOT_BE_NULL;
+        if (makerOrder.amount == 0) return ORDER_AMOUNT_CANNOT_BE_ZERO;
     }
 
     /**
@@ -211,19 +213,19 @@ contract OrderValidatorV1 {
             makerOrder.price
         );
 
-        if ((receiver != address(0)) && (royaltyAmount != 0)) {
+        if (receiver != address(0) && royaltyAmount != 0) {
             // Royalty registry logic
             finalSellerAmount -= royaltyAmount;
             if ((finalSellerAmount * 10000) < (makerOrder.minPercentageToAsk * makerOrder.price))
                 return MIN_NET_RATIO_ABOVE_ROYALTY_FEE_REGISTRY_AND_PROTOCOL_FEE;
         } else {
             // ERC2981 logic
-            if (IERC165(makerOrder.collection).supportsInterface(0x2a55205a)) {
-                (bool answer, bytes memory data) = makerOrder.collection.staticcall(
+            if (IERC165(makerOrder.collection).supportsInterface(INTERFACE_ID_ERC2981)) {
+                (bool success, bytes memory data) = makerOrder.collection.staticcall(
                     abi.encodeWithSelector(IERC2981.royaltyInfo.selector, makerOrder.tokenId, makerOrder.price)
                 );
 
-                if (!answer) {
+                if (!success) {
                     return MISSING_ROYALTY_INFO_FUNCTION_ERC2981;
                 } else {
                     (, royaltyAmount) = abi.decode(data, (address, uint256));
@@ -321,9 +323,9 @@ contract OrderValidatorV1 {
         address user,
         uint256 price
     ) internal view returns (uint256 validationCode) {
-        if ((IERC20(currency).allowance(user, address(looksRareExchange))) < price)
-            return ERC20_APPROVAL_INFERIOR_TO_AMOUNT;
-        if ((IERC20(currency).balanceOf(user)) < price) return ERC20_BALANCE_INFERIOR_TO_AMOUNT;
+        if (IERC20(currency).allowance(user, address(looksRareExchange)) < price)
+            return ERC20_APPROVAL_INFERIOR_TO_PRICE;
+        if (IERC20(currency).balanceOf(user) < price) return ERC20_BALANCE_INFERIOR_TO_PRICE;
     }
 
     /**
@@ -339,30 +341,27 @@ contract OrderValidatorV1 {
         address transferManager,
         uint256 tokenId
     ) internal view returns (uint256 validationCode) {
-        (bool answer, bytes memory data) = collection.staticcall(
-            abi.encodeWithSelector(IERC721.getApproved.selector, tokenId)
-        );
+        if ((IERC721(collection).ownerOf(tokenId)) != user) return ERC721_TOKEN_ID_NOT_IN_BALANCE;
 
-        address approvedAddress;
-
-        if (answer) {
-            approvedAddress = abi.decode(data, (address));
-        }
-
-        bool isApprovedSingle = approvedAddress == transferManager;
-
-        (answer, data) = collection.staticcall(
+        (bool success, bytes memory data) = collection.staticcall(
             abi.encodeWithSelector(IERC721.isApprovedForAll.selector, user, transferManager)
         );
 
         bool isApprovedAll;
-
-        if (answer) {
+        if (success) {
             isApprovedAll = abi.decode(data, (bool));
         }
 
-        if (!isApprovedAll && !isApprovedSingle) return ERC721_NO_APPROVAL_FOR_ALL_OR_TOKEN_ID;
-        if ((IERC721(collection).ownerOf(tokenId)) != user) return ERC721_TOKEN_ID_NOT_IN_BALANCE;
+        if (!isApprovedAll) {
+            (success, data) = collection.staticcall(abi.encodeWithSelector(IERC721.getApproved.selector, tokenId));
+
+            address approvedAddress;
+            if (success) {
+                approvedAddress = abi.decode(data, (address));
+            }
+
+            if (!(approvedAddress == transferManager)) return ERC721_NO_APPROVAL_FOR_ALL_OR_TOKEN_ID;
+        }
     }
 
     /**
@@ -390,7 +389,7 @@ contract OrderValidatorV1 {
      * @notice Check validity of EOA maker order
      * @param digest digest
      * @param targetSigner the signer address to confirm message validity
-     * @param v parameter (27 or 28). This prevents maleability since the public key recovery equation has two possible solutions.
+     * @param v parameter (27 or 28)
      * @param r parameter
      * @param s parameter
      */
@@ -426,14 +425,13 @@ contract OrderValidatorV1 {
         bytes32 r,
         bytes32 s
     ) internal view returns (uint256 validationCode) {
-        (bool answer, bytes memory data) = targetSigner.staticcall(
+        (bool success, bytes memory data) = targetSigner.staticcall(
             abi.encodeWithSelector(IERC1271.isValidSignature.selector, digest, abi.encodePacked(r, s, v))
         );
 
-        if (!answer) return MISSING_IS_VALID_SIGNATURE_FUNCTION_EIP1271;
+        if (!success) return MISSING_IS_VALID_SIGNATURE_FUNCTION_EIP1271;
         bytes4 magicValue = abi.decode(data, (bytes4));
 
-        // 0x1626ba7e is the interfaceId for signature contracts (see IERC1271)
-        if (magicValue != 0x1626ba7e) return SIGNATURE_INVALID_EIP1271;
+        if (magicValue != MAGIC_VALUE_EIP1271) return SIGNATURE_INVALID_EIP1271;
     }
 }
