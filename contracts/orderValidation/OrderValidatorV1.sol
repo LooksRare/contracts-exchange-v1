@@ -94,12 +94,32 @@ contract OrderValidatorV1 {
     }
 
     /**
+     * @notice Check the validities for an array of maker orders
+     * @param makerOrders array of maker order structs
+     * @return validationCodes array of validation codes for the array of maker orders
+     */
+    function checkMultipleOrderValidities(OrderTypes.MakerOrder[] calldata makerOrders)
+        public
+        view
+        returns (uint256[] memory validationCodes)
+    {
+        validationCodes = new uint256[](makerOrders.length);
+
+        for (uint256 i; i < makerOrders.length; ) {
+            validationCodes[i] = checkOrderValidity(makerOrders[i]);
+            unchecked {
+                ++i;
+            }
+        }
+    }
+
+    /**
      * @notice Check the validity of a maker order
      * @param makerOrder maker order struct
      * @return validationCode validation code for the order
      */
     function checkOrderValidity(OrderTypes.MakerOrder calldata makerOrder)
-        external
+        public
         view
         returns (uint256 validationCode)
     {
@@ -360,7 +380,7 @@ contract OrderValidatorV1 {
                 approvedAddress = abi.decode(data, (address));
             }
 
-            if (!(approvedAddress == transferManager)) return ERC721_NO_APPROVAL_FOR_ALL_OR_TOKEN_ID;
+            if (approvedAddress != transferManager) return ERC721_NO_APPROVAL_FOR_ALL_OR_TOKEN_ID;
         }
     }
 
