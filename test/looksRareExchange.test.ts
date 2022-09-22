@@ -10,10 +10,20 @@ import { computeDomainSeparator, computeOrderHash } from "./helpers/signature-he
 import { setUp } from "./test-setup";
 import { tokenSetUp } from "./token-set-up";
 import {
+  CURRENCY_NOT_WHITELISTED,
+  INVALID_S_PARAMETER_EOA,
+  INVALID_V_PARAMETER_EOA,
+  MAKER_SIGNER_IS_NULL_SIGNER,
   MIN_NET_RATIO_ABOVE_ROYALTY_FEE_REGISTRY_AND_PROTOCOL_FEE,
   NONCE_BELOW_MIN_ORDER_NONCE,
   NONCE_EXECUTED_OR_CANCELLED,
+  NO_TRANSFER_MANAGER_AVAILABLE_FOR_COLLECTION,
+  ORDER_AMOUNT_CANNOT_BE_ZERO,
   ORDER_EXPECTED_TO_BE_VALID,
+  STRATEGY_NOT_WHITELISTED,
+  TOO_EARLY_TO_EXECUTE_ORDER,
+  TOO_LATE_TO_EXECUTE_ORDER,
+  WRONG_SIGNER_EOA,
 } from "./helpers/configErrorCodes";
 
 const { defaultAbiCoder, parseEther } = utils;
@@ -104,7 +114,6 @@ describe("LooksRare Exchange", () => {
     const OrderValidatorV1 = await ethers.getContractFactory("OrderValidatorV1");
     orderValidatorV1 = await OrderValidatorV1.deploy(looksRareExchange.address);
     await orderValidatorV1.deployed();
-    await orderValidatorV1.updatePeripheralContractAddresses();
   });
 
   describe("#1 - Regular sales", async () => {
@@ -1488,6 +1497,8 @@ describe("LooksRare Exchange", () => {
         verifyingContract: looksRareExchange.address,
       });
 
+      assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), ORDER_AMOUNT_CANNOT_BE_ZERO);
+
       const takerBidOrder: TakerOrder = {
         isOrderAsk: false,
         taker: takerBidUser.address,
@@ -1693,6 +1704,8 @@ describe("LooksRare Exchange", () => {
         verifyingContract: looksRareExchange.address,
       });
 
+      assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), TOO_EARLY_TO_EXECUTE_ORDER);
+
       const takerBidOrder = createTakerOrder({
         isOrderAsk: false,
         taker: takerBidUser.address,
@@ -1747,6 +1760,7 @@ describe("LooksRare Exchange", () => {
       await expect(
         looksRareExchange.connect(takerAskUser).matchBidWithTakerAsk(takerAskOrder, makerBidOrder)
       ).to.be.revertedWith("Strategy: Execution invalid");
+      assert.equal(await orderValidatorV1.checkOrderValidity(makerBidOrder), TOO_LATE_TO_EXECUTE_ORDER);
     });
 
     it("Currency - Cannot match if currency is removed", async () => {
@@ -1772,6 +1786,8 @@ describe("LooksRare Exchange", () => {
         signerUser: makerAskUser,
         verifyingContract: looksRareExchange.address,
       });
+
+      assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), CURRENCY_NOT_WHITELISTED);
 
       const takerBidOrder: TakerOrder = {
         isOrderAsk: false,
@@ -1859,6 +1875,8 @@ describe("LooksRare Exchange", () => {
         verifyingContract: looksRareExchange.address,
       });
 
+      assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), CURRENCY_NOT_WHITELISTED);
+
       const takerBidOrder: TakerOrder = {
         isOrderAsk: false,
         taker: takerBidUser.address,
@@ -1874,6 +1892,8 @@ describe("LooksRare Exchange", () => {
 
       let tx = await currencyManager.connect(admin).addCurrency(mockUSDT.address);
       await expect(tx).to.emit(currencyManager, "CurrencyWhitelisted").withArgs(mockUSDT.address);
+
+      assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), ORDER_EXPECTED_TO_BE_VALID);
 
       tx = await looksRareExchange.connect(takerBidUser).matchAskWithTakerBid(takerBidOrder, makerAskOrder);
       await expect(tx)
@@ -1926,6 +1946,8 @@ describe("LooksRare Exchange", () => {
       let tx = await executionManager.connect(admin).removeStrategy(strategyStandardSaleForFixedPrice.address);
       await expect(tx).to.emit(executionManager, "StrategyRemoved").withArgs(strategyStandardSaleForFixedPrice.address);
 
+      assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), STRATEGY_NOT_WHITELISTED);
+
       await expect(
         looksRareExchange.connect(takerBidUser).matchAskWithTakerBid(takerBidOrder, makerAskOrder)
       ).to.be.revertedWith("Strategy: Not whitelisted");
@@ -1934,6 +1956,8 @@ describe("LooksRare Exchange", () => {
       await expect(tx)
         .to.emit(executionManager, "StrategyWhitelisted")
         .withArgs(strategyStandardSaleForFixedPrice.address);
+
+      assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), ORDER_EXPECTED_TO_BE_VALID);
 
       tx = await looksRareExchange.connect(takerBidUser).matchAskWithTakerBid(takerBidOrder, makerAskOrder);
 
@@ -1981,6 +2005,11 @@ describe("LooksRare Exchange", () => {
         signerUser: makerAskUser,
         verifyingContract: looksRareExchange.address,
       });
+
+      assert.equal(
+        await orderValidatorV1.checkOrderValidity(makerAskOrder),
+        NO_TRANSFER_MANAGER_AVAILABLE_FOR_COLLECTION
+      );
 
       const takerBidOrder: TakerOrder = {
         isOrderAsk: false,
@@ -2085,7 +2114,10 @@ describe("LooksRare Exchange", () => {
         verifyingContract: looksRareExchange.address,
       });
 
+      assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), ORDER_EXPECTED_TO_BE_VALID);
+
       makerAskOrder.v = 29;
+      assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), INVALID_V_PARAMETER_EOA);
 
       const takerBidOrder: TakerOrder = {
         isOrderAsk: false,
@@ -2125,6 +2157,8 @@ describe("LooksRare Exchange", () => {
 
       // The s value is picked randomly to make the condition be rejected
       makerAskOrder.s = "0x9ca0e65dda4b504989e1db8fc30095f24489ee7226465e9545c32fc7853fe985";
+
+      assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), INVALID_S_PARAMETER_EOA);
 
       const takerBidOrder: TakerOrder = {
         isOrderAsk: false,
@@ -2169,6 +2203,8 @@ describe("LooksRare Exchange", () => {
         verifyingContract: looksRareExchange.address,
       });
 
+      assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), MAKER_SIGNER_IS_NULL_SIGNER);
+
       const takerBidOrder: TakerOrder = {
         isOrderAsk: false,
         taker: accounts[2].address,
@@ -2201,6 +2237,8 @@ describe("LooksRare Exchange", () => {
         signerUser: accounts[3],
         verifyingContract: looksRareExchange.address,
       });
+
+      assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), WRONG_SIGNER_EOA);
 
       const takerBidOrder: TakerOrder = {
         isOrderAsk: false,
