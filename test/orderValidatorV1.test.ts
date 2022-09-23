@@ -1,4 +1,4 @@
-import { assert } from "chai";
+import { assert, expect } from "chai";
 import { BigNumber, constants, Contract, utils } from "ethers";
 import { ethers } from "hardhat";
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
@@ -40,6 +40,7 @@ describe("OrderValidatorV1 (additional tests)", () => {
 
   // Strategy contracts (used for this test file)
   let strategyStandardSaleForFixedPrice: Contract;
+  let strategyAnyItemFromCollectionForFixedPrice: Contract;
 
   // Other global variables
   let standardProtocolFee: BigNumber;
@@ -72,7 +73,7 @@ describe("OrderValidatorV1 (additional tests)", () => {
       transferManagerNonCompliantERC721,
       looksRareExchange,
       strategyStandardSaleForFixedPrice,
-      ,
+      strategyAnyItemFromCollectionForFixedPrice,
       ,
       ,
       ,
@@ -91,7 +92,65 @@ describe("OrderValidatorV1 (additional tests)", () => {
   });
 
   describe("", async () => {
-    it("ERC20 // Approvals and balances", async () => {
+    it("Can verify the validity of multiple maker orders in one call", async () => {
+      await tokenSetUp(
+        accounts.slice(1, 10),
+        weth,
+        mockERC721,
+        mockERC721WithRoyalty,
+        mockERC1155,
+        looksRareExchange,
+        transferManagerERC721,
+        transferManagerERC1155
+      );
+
+      const makerUser = accounts[1];
+
+      // 1. Collection order
+      const makerBidOrder = await createMakerOrder({
+        isOrderAsk: false,
+        signer: makerUser.address,
+        collection: mockERC721.address,
+        tokenId: constants.Zero,
+        price: parseEther("3"),
+        amount: constants.One,
+        strategy: strategyAnyItemFromCollectionForFixedPrice.address,
+        currency: weth.address,
+        nonce: constants.Zero,
+        startTime: startTimeOrder,
+        endTime: endTimeOrder,
+        minPercentageToAsk: constants.Zero,
+        params: defaultAbiCoder.encode([], []),
+        signerUser: makerUser,
+        verifyingContract: looksRareExchange.address,
+      });
+
+      // Maker ask
+      const makerAskOrder: MakerOrderWithSignature = await createMakerOrder({
+        isOrderAsk: true,
+        signer: makerUser.address,
+        collection: mockERC721.address,
+        price: parseEther("3"),
+        tokenId: constants.Zero,
+        amount: constants.One,
+        strategy: strategyStandardSaleForFixedPrice.address,
+        currency: weth.address,
+        nonce: constants.Zero,
+        startTime: startTimeOrder,
+        endTime: endTimeOrder,
+        minPercentageToAsk: constants.Zero,
+        params: defaultAbiCoder.encode([], []),
+        signerUser: makerUser,
+        verifyingContract: looksRareExchange.address,
+      });
+
+      expect(await orderValidatorV1.checkMultipleOrderValidities([makerBidOrder, makerAskOrder])).to.eql([
+        BigNumber.from(ORDER_EXPECTED_TO_BE_VALID),
+        BigNumber.from(ORDER_EXPECTED_TO_BE_VALID),
+      ]);
+    });
+
+    it("ERC20 // Can identify issues with approvals and balances for maker bid", async () => {
       const makerBidUser = accounts[2];
 
       // 1. Balance inferior to bid price
@@ -126,7 +185,7 @@ describe("OrderValidatorV1 (additional tests)", () => {
       assert.equal(await orderValidatorV1.checkOrderValidity(makerBidOrder), ORDER_EXPECTED_TO_BE_VALID);
     });
 
-    it("ERC721 // Approvals and balances", async () => {
+    it("ERC721 // Can identify issues with approvals and balances for maker ask", async () => {
       const makerAskUser = accounts[1];
       const tokenId = constants.Zero;
 
@@ -171,7 +230,7 @@ describe("OrderValidatorV1 (additional tests)", () => {
       assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), ORDER_EXPECTED_TO_BE_VALID);
     });
 
-    it("ERC1155 // Approvals and balances", async () => {
+    it("ERC1155 // Can identify issues with approvals and balances for maker ask", async () => {
       const makerAskUser = accounts[1];
       const tokenId = constants.Zero;
 
@@ -216,7 +275,7 @@ describe("OrderValidatorV1 (additional tests)", () => {
       assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), ORDER_EXPECTED_TO_BE_VALID);
     });
 
-    it("Transfer manager is not for standard ERC721/ERC1155", async () => {
+    it("Can identify if NFT transfer manager is not the standard ERC721/ERC1155 transfer contracts", async () => {
       const makerAskUser = accounts[1];
 
       const MockNonCompliantERC721 = await ethers.getContractFactory("MockNonCompliantERC721");
@@ -248,7 +307,7 @@ describe("OrderValidatorV1 (additional tests)", () => {
       assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), CUSTOM_TRANSFER_MANAGER);
     });
 
-    it("MinPercentageToAsk", async () => {
+    it("Can identify stale orders with MinPercentageToAsk", async () => {
       await tokenSetUp(
         accounts.slice(1, 10),
         weth,
