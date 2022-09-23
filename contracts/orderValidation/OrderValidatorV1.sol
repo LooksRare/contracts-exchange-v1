@@ -135,8 +135,7 @@ contract OrderValidatorV1 {
         if (response != ORDER_EXPECTED_TO_BE_VALID) return response;
         response = checkValidityTimestamps(makerOrder);
         if (response != ORDER_EXPECTED_TO_BE_VALID) return response;
-        response = checkValidityApprovalsAndBalances(makerOrder);
-        if (response != ORDER_EXPECTED_TO_BE_VALID) return response;
+        return checkValidityApprovalsAndBalances(makerOrder);
     }
 
     /**
@@ -183,11 +182,9 @@ contract OrderValidatorV1 {
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _DOMAIN_SEPARATOR, makerOrder.hash()));
 
         if (!Address.isContract(makerOrder.signer)) {
-            uint256 response = _validateEOA(digest, makerOrder.signer, makerOrder.v, makerOrder.r, makerOrder.s);
-            if (response != ORDER_EXPECTED_TO_BE_VALID) return response;
+            return _validateEOA(digest, makerOrder.signer, makerOrder.v, makerOrder.r, makerOrder.s);
         } else {
-            uint256 response = _validateERC1271(digest, makerOrder.signer, makerOrder.v, makerOrder.r, makerOrder.s);
-            if (response != ORDER_EXPECTED_TO_BE_VALID) return response;
+            return _validateERC1271(digest, makerOrder.signer, makerOrder.v, makerOrder.r, makerOrder.s);
         }
     }
 
@@ -248,7 +245,7 @@ contract OrderValidatorV1 {
                 if (!success) {
                     return MISSING_ROYALTY_INFO_FUNCTION_ERC2981;
                 } else {
-                    (, royaltyAmount) = abi.decode(data, (address, uint256));
+                    (receiver, royaltyAmount) = abi.decode(data, (address, uint256));
                 }
 
                 if (receiver != address(0)) {
@@ -285,16 +282,10 @@ contract OrderValidatorV1 {
         returns (uint256 validationCode)
     {
         if (makerOrder.isOrderAsk) {
-            uint256 response = _validateNFTApprovals(
-                makerOrder.collection,
-                makerOrder.signer,
-                makerOrder.tokenId,
-                makerOrder.amount
-            );
-            if (response != ORDER_EXPECTED_TO_BE_VALID) return response;
+            return
+                _validateNFTApprovals(makerOrder.collection, makerOrder.signer, makerOrder.tokenId, makerOrder.amount);
         } else {
-            uint256 response = _validateERC20(makerOrder.currency, makerOrder.signer, makerOrder.price);
-            if (response != ORDER_EXPECTED_TO_BE_VALID) return response;
+            return _validateERC20(makerOrder.currency, makerOrder.signer, makerOrder.price);
         }
     }
 
@@ -324,11 +315,11 @@ contract OrderValidatorV1 {
         if (transferManager == address(0)) return NO_TRANSFER_MANAGER_AVAILABLE_FOR_COLLECTION;
 
         if (transferManager == TRANSFER_MANAGER_ERC721) {
-            _validateERC721AndEquivalents(collection, user, transferManager, tokenId);
+            return _validateERC721AndEquivalents(collection, user, transferManager, tokenId);
         } else if (transferManager == TRANSFER_MANAGER_ERC1155) {
-            _validateERC1155(collection, user, transferManager, tokenId, amount);
+            return _validateERC1155(collection, user, transferManager, tokenId, amount);
         } else {
-            return NO_TRANSFER_MANAGER_AVAILABLE_FOR_COLLECTION;
+            return CUSTOM_TRANSFER_MANAGER;
         }
     }
 
@@ -336,16 +327,16 @@ contract OrderValidatorV1 {
      * @notice Check validity of ERC20 approvals and balances required to process the order
      * @param currency address of the currency
      * @param user address of the user
-     * @param price price
+     * @param price price (defined by the maker order)
      */
     function _validateERC20(
         address currency,
         address user,
         uint256 price
     ) internal view returns (uint256 validationCode) {
+        if (IERC20(currency).balanceOf(user) < price) return ERC20_BALANCE_INFERIOR_TO_PRICE;
         if (IERC20(currency).allowance(user, address(looksRareExchange)) < price)
             return ERC20_APPROVAL_INFERIOR_TO_PRICE;
-        if (IERC20(currency).balanceOf(user) < price) return ERC20_BALANCE_INFERIOR_TO_PRICE;
     }
 
     /**
@@ -361,9 +352,16 @@ contract OrderValidatorV1 {
         address transferManager,
         uint256 tokenId
     ) internal view returns (uint256 validationCode) {
-        if ((IERC721(collection).ownerOf(tokenId)) != user) return ERC721_TOKEN_ID_NOT_IN_BALANCE;
-
+        // 1. Verify tokenId is owned by user and catch revertion if ERC721 ownerOf fails
         (bool success, bytes memory data) = collection.staticcall(
+            abi.encodeWithSelector(IERC721.ownerOf.selector, tokenId)
+        );
+
+        if (!success) return ERC721_TOKEN_ID_DOES_NOT_EXIST;
+        if (abi.decode(data, (address)) != user) return ERC721_TOKEN_ID_NOT_IN_BALANCE;
+
+        // 2. Verify if collection is approved by transfer manager
+        (success, data) = collection.staticcall(
             abi.encodeWithSelector(IERC721.isApprovedForAll.selector, user, transferManager)
         );
 
@@ -373,6 +371,7 @@ contract OrderValidatorV1 {
         }
 
         if (!isApprovedAll) {
+            // 3. If collection is not approved by transfer manager, try to see if it is approved individually
             (success, data) = collection.staticcall(abi.encodeWithSelector(IERC721.getApproved.selector, tokenId));
 
             address approvedAddress;
@@ -399,10 +398,11 @@ contract OrderValidatorV1 {
         uint256 tokenId,
         uint256 amount
     ) internal view returns (uint256 validationCode) {
-        bool isApprovedAll = IERC1155(collection).isApprovedForAll(user, transferManager);
-        if (!isApprovedAll) return ERC1155_NO_APPROVAL_FOR_ALL;
+        // @dev ERC1155 balanceOf doesn't revert if tokenId doesn't exist
         if ((IERC1155(collection).balanceOf(user, tokenId)) < amount)
             return ERC1155_BALANCE_TOKEN_ID_INFERIOR_TO_AMOUNT;
+        bool isApprovedAll = IERC1155(collection).isApprovedForAll(user, transferManager);
+        if (!isApprovedAll) return ERC1155_NO_APPROVAL_FOR_ALL;
     }
 
     /**

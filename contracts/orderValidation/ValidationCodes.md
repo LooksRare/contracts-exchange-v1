@@ -35,9 +35,11 @@
 | 601  | TOO_EARLY_TO_EXECUTE_ORDER                                |
 | 602  | TOO_LATE_TO_EXECUTE_ORDER                                 |
 | 701  | NO_TRANSFER_MANAGER_AVAILABLE_FOR_COLLECTION              |
-| 711  | ERC20_APPROVAL_INFERIOR_TO_PRICE                          |
-| 712  | ERC20_BALANCE_INFERIOR_TO_PRICE                           |
-| 721  | ERC721_NO_APPROVAL_FOR_ALL_OR_TOKEN_ID                    |
+| 702  | CUSTOM_TRANSFER_MANAGER                                   |
+| 711  | ERC20_BALANCE_INFERIOR_TO_PRICE                           |
+| 712  | ERC20_APPROVAL_INFERIOR_TO_PRICE                          |
+| 721  | ERC721_TOKEN_ID_DOES_NOT_EXIST                            |
 | 722  | ERC721_TOKEN_ID_NOT_IN_BALANCE                            |
-| 731  | ERC1155_NO_APPROVAL_FOR_ALL                               |
-| 732  | ERC1155_BALANCE_TOKEN_ID_INFERIOR_TO_AMOUNT               |
+| 723  | ERC721_NO_APPROVAL_FOR_ALL_OR_TOKEN_ID                    |
+| 731  | ERC1155_BALANCE_TOKEN_ID_INFERIOR_TO_AMOUNT               |
+| 732  | ERC1155_NO_APPROVAL_FOR_ALL                               |
