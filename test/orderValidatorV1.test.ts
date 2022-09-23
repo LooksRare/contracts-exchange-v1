@@ -7,6 +7,7 @@ import { createMakerOrder } from "./helpers/order-helper";
 import { setUp } from "./test-setup";
 import { tokenSetUp } from "./token-set-up";
 import {
+  CUSTOM_TRANSFER_MANAGER,
   ERC1155_BALANCE_TOKEN_ID_INFERIOR_TO_AMOUNT,
   ERC1155_NO_APPROVAL_FOR_ALL,
   ERC20_APPROVAL_INFERIOR_TO_PRICE,
@@ -31,6 +32,8 @@ describe("OrderValidatorV1 (additional tests)", () => {
   // Exchange contracts
   let transferManagerERC721: Contract;
   let transferManagerERC1155: Contract;
+  let transferManagerNonCompliantERC721: Contract;
+  let transferSelectorNFT: Contract;
   let royaltyFeeSetter: Contract;
   let looksRareExchange: Contract;
   let orderValidatorV1: Contract;
@@ -63,10 +66,10 @@ describe("OrderValidatorV1 (additional tests)", () => {
       mockERC721WithRoyalty,
       ,
       ,
-      ,
+      transferSelectorNFT,
       transferManagerERC721,
       transferManagerERC1155,
-      ,
+      transferManagerNonCompliantERC721,
       looksRareExchange,
       strategyStandardSaleForFixedPrice,
       ,
@@ -211,6 +214,38 @@ describe("OrderValidatorV1 (additional tests)", () => {
       // 3. Signer approves all
       await mockERC1155.connect(makerAskUser).setApprovalForAll(transferManagerERC1155.address, true);
       assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), ORDER_EXPECTED_TO_BE_VALID);
+    });
+
+    it("Transfer manager is not for standard ERC721/ERC1155", async () => {
+      const makerAskUser = accounts[1];
+
+      const MockNonCompliantERC721 = await ethers.getContractFactory("MockNonCompliantERC721");
+      const mockNonCompliantERC721 = await MockNonCompliantERC721.deploy("Mock Bad ERC721", "MBERC721");
+      await mockNonCompliantERC721.deployed();
+
+      await transferSelectorNFT
+        .connect(admin)
+        .addCollectionTransferManager(mockNonCompliantERC721.address, transferManagerNonCompliantERC721.address);
+
+      const makerAskOrder: MakerOrderWithSignature = await createMakerOrder({
+        isOrderAsk: true,
+        signer: makerAskUser.address,
+        collection: mockNonCompliantERC721.address,
+        price: parseEther("3"),
+        tokenId: constants.Zero,
+        amount: constants.One,
+        strategy: strategyStandardSaleForFixedPrice.address,
+        currency: weth.address,
+        nonce: constants.Zero,
+        startTime: startTimeOrder,
+        endTime: endTimeOrder,
+        minPercentageToAsk: BigNumber.from("9800"),
+        params: defaultAbiCoder.encode([], []),
+        signerUser: makerAskUser,
+        verifyingContract: looksRareExchange.address,
+      });
+
+      assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), CUSTOM_TRANSFER_MANAGER);
     });
 
     it("MinPercentageToAsk", async () => {
