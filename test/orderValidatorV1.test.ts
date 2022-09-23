@@ -29,7 +29,6 @@ describe("OrderValidatorV1 (additional tests)", () => {
   let weth: Contract;
 
   // Exchange contracts
-  let transferSelectorNFT: Contract;
   let transferManagerERC721: Contract;
   let transferManagerERC1155: Contract;
   let royaltyFeeSetter: Contract;
@@ -64,7 +63,7 @@ describe("OrderValidatorV1 (additional tests)", () => {
       mockERC721WithRoyalty,
       ,
       ,
-      transferSelectorNFT,
+      ,
       transferManagerERC721,
       transferManagerERC1155,
       ,
