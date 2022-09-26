@@ -8,7 +8,7 @@ import { setUp } from "./test-setup";
 import { tokenSetUp } from "./token-set-up";
 import {
   CUSTOM_TRANSFER_MANAGER,
-  ERC1155_BALANCE_TOKEN_ID_INFERIOR_TO_AMOUNT,
+  ERC1155_BALANCE_OF_TOKEN_ID_INFERIOR_TO_AMOUNT,
   ERC1155_NO_APPROVAL_FOR_ALL,
   ERC20_APPROVAL_INFERIOR_TO_PRICE,
   ERC20_BALANCE_INFERIOR_TO_PRICE,
@@ -252,12 +252,18 @@ describe("OrderValidatorV1 (additional tests)", () => {
       verifyingContract: looksRareExchange.address,
     });
 
-    assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), ERC1155_BALANCE_TOKEN_ID_INFERIOR_TO_AMOUNT);
+    assert.equal(
+      await orderValidatorV1.checkOrderValidity(makerAskOrder),
+      ERC1155_BALANCE_OF_TOKEN_ID_INFERIOR_TO_AMOUNT
+    );
 
     // 2. Signer has a balanceOf(tokenId) inferior to order amount
     // Mints 1 tokenId=0 (balance = 1)
     await mockERC1155.mint(makerAskUser.address, tokenId, constants.One, defaultAbiCoder.encode([], []));
-    assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), ERC1155_BALANCE_TOKEN_ID_INFERIOR_TO_AMOUNT);
+    assert.equal(
+      await orderValidatorV1.checkOrderValidity(makerAskOrder),
+      ERC1155_BALANCE_OF_TOKEN_ID_INFERIOR_TO_AMOUNT
+    );
 
     // Mints 1 tokenId=0 (balance = 2)
     await mockERC1155.mint(makerAskUser.address, tokenId, constants.One, defaultAbiCoder.encode([], []));
