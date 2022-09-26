@@ -218,12 +218,13 @@ contract OrderValidatorV1 {
         // Return if order is bid since there is no protection for minPercentageToAsk
         if (!makerOrder.isOrderAsk) return ORDER_EXPECTED_TO_BE_VALID;
 
+        uint256 minNetPriceToAsk = (makerOrder.minPercentageToAsk * makerOrder.price);
+
         uint256 finalSellerAmount = makerOrder.price;
         uint256 protocolFee = (makerOrder.price * IExecutionStrategy(makerOrder.strategy).viewProtocolFee()) / 10000;
         finalSellerAmount -= protocolFee;
 
-        if ((finalSellerAmount * 10000) < (makerOrder.minPercentageToAsk * makerOrder.price))
-            return MIN_NET_RATIO_ABOVE_PROTOCOL_FEE;
+        if ((finalSellerAmount * 10000) < minNetPriceToAsk) return MIN_NET_RATIO_ABOVE_PROTOCOL_FEE;
 
         (address receiver, uint256 royaltyAmount) = royaltyFeeRegistry.royaltyInfo(
             makerOrder.collection,
@@ -233,7 +234,7 @@ contract OrderValidatorV1 {
         if (receiver != address(0) && royaltyAmount != 0) {
             // Royalty registry logic
             finalSellerAmount -= royaltyAmount;
-            if ((finalSellerAmount * 10000) < (makerOrder.minPercentageToAsk * makerOrder.price))
+            if ((finalSellerAmount * 10000) < minNetPriceToAsk)
                 return MIN_NET_RATIO_ABOVE_ROYALTY_FEE_REGISTRY_AND_PROTOCOL_FEE;
         } else {
             // ERC2981 logic
@@ -250,7 +251,7 @@ contract OrderValidatorV1 {
 
                 if (receiver != address(0)) {
                     finalSellerAmount -= royaltyAmount;
-                    if ((finalSellerAmount * 10000) < (makerOrder.minPercentageToAsk * makerOrder.price))
+                    if ((finalSellerAmount * 10000) < minNetPriceToAsk)
                         return MIN_NET_RATIO_ABOVE_ROYALTY_FEE_ERC2981_AND_PROTOCOL_FEE;
                 }
             }
