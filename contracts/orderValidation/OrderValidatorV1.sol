@@ -399,11 +399,19 @@ contract OrderValidatorV1 {
         uint256 tokenId,
         uint256 amount
     ) internal view returns (uint256 validationCode) {
-        // @dev ERC1155 balanceOf doesn't revert if tokenId doesn't exist
-        if ((IERC1155(collection).balanceOf(user, tokenId)) < amount)
-            return ERC1155_BALANCE_TOKEN_ID_INFERIOR_TO_AMOUNT;
-        bool isApprovedAll = IERC1155(collection).isApprovedForAll(user, transferManager);
-        if (!isApprovedAll) return ERC1155_NO_APPROVAL_FOR_ALL;
+        (bool success, bytes memory data) = collection.staticcall(
+            abi.encodeWithSelector(IERC1155.balanceOf.selector, user, tokenId)
+        );
+
+        if (!success) return ERC1155_BALANCE_OF_DOES_NOT_EXIST;
+        if (abi.decode(data, (uint256)) < amount) return ERC1155_BALANCE_OF_TOKEN_ID_INFERIOR_TO_AMOUNT;
+
+        (success, data) = collection.staticcall(
+            abi.encodeWithSelector(IERC1155.isApprovedForAll.selector, user, transferManager)
+        );
+
+        if (!success) return ERC1155_IS_APPROVED_FOR_ALL_DOES_NOT_EXIST;
+        if (!abi.decode(data, (bool))) return ERC1155_NO_APPROVAL_FOR_ALL;
     }
 
     /**

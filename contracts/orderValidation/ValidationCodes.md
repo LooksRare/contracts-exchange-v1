@@ -41,5 +41,7 @@
 | 721  | ERC721_TOKEN_ID_DOES_NOT_EXIST                            |
 | 722  | ERC721_TOKEN_ID_NOT_IN_BALANCE                            |
 | 723  | ERC721_NO_APPROVAL_FOR_ALL_OR_TOKEN_ID                    |
-| 731  | ERC1155_BALANCE_TOKEN_ID_INFERIOR_TO_AMOUNT               |
-| 732  | ERC1155_NO_APPROVAL_FOR_ALL                               |
+| 731  | ERC1155_BALANCE_OF_DOES_NOT_EXIST                         |
+| 732  | ERC1155_BALANCE_OF_TOKEN_ID_INFERIOR_TO_AMOUNT            |
+| 733  | ERC1155_IS_APPROVED_FOR_ALL_DOES_NOT_EXIST                |
+| 734  | ERC1155_NO_APPROVAL_FOR_ALL                               |
