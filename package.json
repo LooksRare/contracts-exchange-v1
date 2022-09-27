@@ -11,7 +11,7 @@
     "/contracts/executionStrategies/*.sol",
     "/contracts/interfaces/*.sol",
     "/contracts/libraries/*.sol",
-    "contracts/orderValidation/*",
+    "/contracts/orderValidation/*",
     "/contracts/royaltyFeeHelpers/*.sol",
     "/contracts/transferManagers/*.sol"
   ],
