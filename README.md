@@ -11,6 +11,8 @@ This project contains all smart contracts used for the current LooksRare exchang
 - royalty-related contracts
 - transfer managers and selector contracts
 
+It also contains a peripheral contract (`OrderValidatorV1`) that is used to verify the validity of (maker) orders.
+
 ## Installation
 
 ```shell
