@@ -28,7 +28,7 @@ import {LooksRareExchange} from "../LooksRareExchange.sol";
  * @title OrderValidatorV1
  * @notice This contract is used to check the validity of a maker order in the LooksRareProtocol (v1).
  *         It performs checks for:
- *         1. Nonce-related issues (e.g., nonce executed or canceled)
+ *         1. Nonce-related issues (e.g., nonce executed or cancelled)
  *         2. Amount-related issues (e.g. order amount being 0)
  *         3. Signature-related issues
  *         4. Whitelist-related issues (i.e., currency or strategy not whitelisted)
@@ -69,14 +69,14 @@ contract OrderValidatorV1 {
     // Execution Manager
     IExecutionManager public immutable executionManager;
 
-    // LooksRare Exchange
-    LooksRareExchange public immutable looksRareExchange;
+    // Royalty Fee Registry
+    IRoyaltyFeeRegistry public immutable royaltyFeeRegistry;
 
     // Transfer Selector
     ITransferSelectorNFTExtended public immutable transferSelectorNFT;
 
-    // Royalty Fee Registry
-    IRoyaltyFeeRegistry public immutable royaltyFeeRegistry;
+    // LooksRare Exchange
+    LooksRareExchange public immutable looksRareExchange;
 
     /**
      * @notice Constructor
@@ -146,7 +146,7 @@ contract OrderValidatorV1 {
     }
 
     /**
-     * @notice Check validity of nonces
+     * @notice Check the validity for user nonces
      * @param makerOrder Maker order struct
      * @return validationCode Validation code
      */
@@ -162,7 +162,7 @@ contract OrderValidatorV1 {
     }
 
     /**
-     * @notice Check validity of amounts
+     * @notice Check the validity of amounts
      * @param makerOrder Maker order struct
      * @return validationCode Validation code
      */
@@ -208,12 +208,12 @@ contract OrderValidatorV1 {
         // Verify whether the currency is whitelisted
         if (!currencyManager.isCurrencyWhitelisted(makerOrder.currency)) return CURRENCY_NOT_WHITELISTED;
 
-        // Verify whether strategy can be executed
+        // Verify whether the strategy is whitelisted
         if (!executionManager.isStrategyWhitelisted(makerOrder.strategy)) return STRATEGY_NOT_WHITELISTED;
     }
 
     /**
-     * @notice Check validity of min percentage to ask
+     * @notice Check the validity of min percentage to ask
      * @param makerOrder Maker order struct
      * @return validationCode Validation code
      */
@@ -266,7 +266,7 @@ contract OrderValidatorV1 {
     }
 
     /**
-     * @notice Check validity of order timestamps
+     * @notice Check the validity of order timestamps
      * @param makerOrder Maker order struct
      * @return validationCode Validation code
      */
@@ -392,7 +392,7 @@ contract OrderValidatorV1 {
     }
 
     /**
-     * @notice Check validity of ERC1155 approvals and balances required to process the order
+     * @notice Check the validity of ERC1155 approvals and balances required to process the maker ask order
      * @param collection Collection address
      * @param user User address
      * @param transferManager Transfer manager address
@@ -447,7 +447,7 @@ contract OrderValidatorV1 {
     }
 
     /**
-     * @notice Check the validity of ERC-1271 maker order
+     * @notice Check the validity for EIP1271 maker order
      * @param digest Digest
      * @param targetSigner Expected signer address to confirm message validity
      * @param v V parameter (27 or 28)
