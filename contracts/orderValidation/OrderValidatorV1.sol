@@ -449,10 +449,10 @@ contract OrderValidatorV1 {
     /**
      * @notice Check the validity of ERC-1271 maker order
      * @param digest Digest
-     * @param targetSigner Expect signer address to confirm message validity
-     * @param v Parameter (27 or 28)
-     * @param r Parameter
-     * @param s Parameter
+     * @param targetSigner Expected signer address to confirm message validity
+     * @param v V parameter (27 or 28)
+     * @param r R parameter
+     * @param s S parameter
      */
     function _validateERC1271(
         bytes32 digest,

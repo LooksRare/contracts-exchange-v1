@@ -13,7 +13,7 @@ export async function assertErrorCode(
   if (ERROR_CODE % 100 !== 0) {
     arraySlot = Math.floor(ERROR_CODE / 100) - 1;
   } else {
-    arraySlot = Math.floor(ERROR_CODE / 100);
+    arraySlot = ERROR_CODE / 100;
   }
   assert.equal(res[arraySlot], ERROR_CODE);
 }
