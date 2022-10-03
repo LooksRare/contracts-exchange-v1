@@ -19,12 +19,12 @@ import {
   NONCE_EXECUTED_OR_CANCELLED,
   NO_TRANSFER_MANAGER_AVAILABLE_FOR_COLLECTION,
   ORDER_AMOUNT_CANNOT_BE_ZERO,
-  ORDER_EXPECTED_TO_BE_VALID,
   STRATEGY_NOT_WHITELISTED,
   TOO_EARLY_TO_EXECUTE_ORDER,
   TOO_LATE_TO_EXECUTE_ORDER,
   WRONG_SIGNER_EOA,
 } from "./helpers/configErrorCodes";
+import { assertErrorCode, assertOrderValid } from "./helpers/order-validation-helper";
 
 const { defaultAbiCoder, parseEther } = utils;
 
@@ -139,7 +139,7 @@ describe("LooksRare Exchange", () => {
         verifyingContract: looksRareExchange.address,
       });
 
-      assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), ORDER_EXPECTED_TO_BE_VALID);
+      await assertOrderValid(makerAskOrder, orderValidatorV1);
 
       const takerBidOrder = createTakerOrder({
         isOrderAsk: false,
@@ -171,7 +171,8 @@ describe("LooksRare Exchange", () => {
           takerBidOrder.price
         );
 
-      assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), NONCE_EXECUTED_OR_CANCELLED);
+      await assertErrorCode(makerAskOrder, NONCE_EXECUTED_OR_CANCELLED, orderValidatorV1);
+
       assert.equal(await mockERC721.ownerOf("0"), takerBidUser.address);
       assert.isTrue(
         await looksRareExchange.isUserOrderNonceExecutedOrCancelled(makerAskUser.address, makerAskOrder.nonce)
@@ -207,7 +208,7 @@ describe("LooksRare Exchange", () => {
         verifyingContract: looksRareExchange.address,
       });
 
-      assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), ORDER_EXPECTED_TO_BE_VALID);
+      await assertOrderValid(makerAskOrder, orderValidatorV1);
 
       const takerBidOrder = createTakerOrder({
         isOrderAsk: false,
@@ -244,7 +245,8 @@ describe("LooksRare Exchange", () => {
           takerBidOrder.price
         );
 
-      assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), NONCE_EXECUTED_OR_CANCELLED);
+      await assertErrorCode(makerAskOrder, NONCE_EXECUTED_OR_CANCELLED, orderValidatorV1);
+
       assert.equal(await mockERC721.ownerOf("0"), takerBidUser.address);
       assert.isTrue(
         await looksRareExchange.isUserOrderNonceExecutedOrCancelled(makerAskUser.address, makerAskOrder.nonce)
@@ -276,7 +278,7 @@ describe("LooksRare Exchange", () => {
         verifyingContract: looksRareExchange.address,
       });
 
-      assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), ORDER_EXPECTED_TO_BE_VALID);
+      await assertOrderValid(makerAskOrder, orderValidatorV1);
 
       const takerBidOrder = createTakerOrder({
         isOrderAsk: false,
@@ -308,7 +310,7 @@ describe("LooksRare Exchange", () => {
           takerBidOrder.price
         );
 
-      assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), NONCE_EXECUTED_OR_CANCELLED);
+      await assertErrorCode(makerAskOrder, NONCE_EXECUTED_OR_CANCELLED, orderValidatorV1);
       assert.isTrue(
         await looksRareExchange.isUserOrderNonceExecutedOrCancelled(makerAskUser.address, makerAskOrder.nonce)
       );
@@ -339,7 +341,7 @@ describe("LooksRare Exchange", () => {
         verifyingContract: looksRareExchange.address,
       });
 
-      assert.equal(await orderValidatorV1.checkOrderValidity(makerBidOrder), ORDER_EXPECTED_TO_BE_VALID);
+      await assertOrderValid(makerBidOrder, orderValidatorV1);
 
       const takerAskOrder = createTakerOrder({
         isOrderAsk: true,
@@ -366,7 +368,7 @@ describe("LooksRare Exchange", () => {
           makerBidOrder.price
         );
 
-      assert.equal(await orderValidatorV1.checkOrderValidity(makerBidOrder), NONCE_EXECUTED_OR_CANCELLED);
+      await assertErrorCode(makerBidOrder, NONCE_EXECUTED_OR_CANCELLED, orderValidatorV1);
       assert.equal(await mockERC721.ownerOf("0"), makerBidUser.address);
       assert.isTrue(
         await looksRareExchange.isUserOrderNonceExecutedOrCancelled(makerBidUser.address, makerBidOrder.nonce)
@@ -395,7 +397,7 @@ describe("LooksRare Exchange", () => {
         verifyingContract: looksRareExchange.address,
       });
 
-      assert.equal(await orderValidatorV1.checkOrderValidity(makerBidOrder), ORDER_EXPECTED_TO_BE_VALID);
+      await assertOrderValid(makerBidOrder, orderValidatorV1);
 
       const takerAskOrder = createTakerOrder({
         isOrderAsk: true,
@@ -422,7 +424,7 @@ describe("LooksRare Exchange", () => {
           makerBidOrder.price
         );
 
-      assert.equal(await orderValidatorV1.checkOrderValidity(makerBidOrder), NONCE_EXECUTED_OR_CANCELLED);
+      await assertErrorCode(makerBidOrder, NONCE_EXECUTED_OR_CANCELLED, orderValidatorV1);
       assert.isTrue(
         await looksRareExchange.isUserOrderNonceExecutedOrCancelled(makerBidUser.address, makerBidOrder.nonce)
       );
@@ -461,7 +463,7 @@ describe("LooksRare Exchange", () => {
         verifyingContract: looksRareExchange.address,
       });
 
-      assert.equal(await orderValidatorV1.checkOrderValidity(makerBidOrder), ORDER_EXPECTED_TO_BE_VALID);
+      await assertOrderValid(makerBidOrder, orderValidatorV1);
 
       const takerAskOrder = createTakerOrder({
         isOrderAsk: true,
@@ -489,7 +491,7 @@ describe("LooksRare Exchange", () => {
         );
 
       // Verify funds/tokens were transferred
-      assert.equal(await orderValidatorV1.checkOrderValidity(makerBidOrder), NONCE_EXECUTED_OR_CANCELLED);
+      await assertErrorCode(makerBidOrder, NONCE_EXECUTED_OR_CANCELLED, orderValidatorV1);
       assert.equal(await mockERC721.ownerOf("1"), mockSignerContract.address);
       assert.isTrue(
         await looksRareExchange.isUserOrderNonceExecutedOrCancelled(mockSignerContract.address, makerBidOrder.nonce)
@@ -533,7 +535,7 @@ describe("LooksRare Exchange", () => {
         verifyingContract: looksRareExchange.address,
       });
 
-      assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), ORDER_EXPECTED_TO_BE_VALID);
+      await assertOrderValid(makerAskOrder, orderValidatorV1);
 
       const takerBidOrder = createTakerOrder({
         isOrderAsk: false,
@@ -561,7 +563,7 @@ describe("LooksRare Exchange", () => {
         );
 
       // Verify funds/tokens were transferred
-      assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), NONCE_EXECUTED_OR_CANCELLED);
+      await assertErrorCode(makerAskOrder, NONCE_EXECUTED_OR_CANCELLED, orderValidatorV1);
       assert.equal(await mockERC721.ownerOf("1"), takerBidUser.address);
       assert.deepEqual(await weth.balanceOf(mockSignerContract.address), takerBidOrder.price.mul("9800").div("10000"));
       assert.isTrue(
@@ -603,7 +605,7 @@ describe("LooksRare Exchange", () => {
         verifyingContract: looksRareExchange.address,
       });
 
-      assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), ORDER_EXPECTED_TO_BE_VALID);
+      await assertOrderValid(makerAskOrder, orderValidatorV1);
 
       const takerBidOrder: TakerOrder = {
         isOrderAsk: false,
@@ -642,7 +644,7 @@ describe("LooksRare Exchange", () => {
           expectedRoyaltyAmount
         );
 
-      assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), NONCE_EXECUTED_OR_CANCELLED);
+      await assertErrorCode(makerAskOrder, NONCE_EXECUTED_OR_CANCELLED, orderValidatorV1);
       assert.equal(await mockERC721WithRoyalty.ownerOf("0"), takerBidUser.address);
       assert.isTrue(
         await looksRareExchange.isUserOrderNonceExecutedOrCancelled(makerAskUser.address, makerAskOrder.nonce)
@@ -679,7 +681,7 @@ describe("LooksRare Exchange", () => {
         verifyingContract: looksRareExchange.address,
       });
 
-      assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), ORDER_EXPECTED_TO_BE_VALID);
+      await assertOrderValid(makerAskOrder, orderValidatorV1);
 
       const takerBidOrder: TakerOrder = {
         isOrderAsk: false,
@@ -723,7 +725,7 @@ describe("LooksRare Exchange", () => {
           expectedRoyaltyAmount
         );
 
-      assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), NONCE_EXECUTED_OR_CANCELLED);
+      await assertErrorCode(makerAskOrder, NONCE_EXECUTED_OR_CANCELLED, orderValidatorV1);
       assert.equal(await mockERC721WithRoyalty.ownerOf("0"), takerBidUser.address);
       assert.isTrue(
         await looksRareExchange.isUserOrderNonceExecutedOrCancelled(makerAskUser.address, makerAskOrder.nonce)
@@ -772,7 +774,7 @@ describe("LooksRare Exchange", () => {
         verifyingContract: looksRareExchange.address,
       });
 
-      assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), ORDER_EXPECTED_TO_BE_VALID);
+      await assertOrderValid(makerAskOrder, orderValidatorV1);
 
       const takerBidOrder: TakerOrder = {
         isOrderAsk: false,
@@ -812,7 +814,7 @@ describe("LooksRare Exchange", () => {
           expectedRoyaltyAmount
         );
 
-      assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), NONCE_EXECUTED_OR_CANCELLED);
+      await assertErrorCode(makerAskOrder, NONCE_EXECUTED_OR_CANCELLED, orderValidatorV1);
       assert.equal(await mockERC721.ownerOf("0"), takerBidUser.address);
       assert.isTrue(
         await looksRareExchange.isUserOrderNonceExecutedOrCancelled(makerAskUser.address, makerAskOrder.nonce)
@@ -850,17 +852,14 @@ describe("LooksRare Exchange", () => {
         verifyingContract: looksRareExchange.address,
       });
 
-      assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), ORDER_EXPECTED_TO_BE_VALID);
+      await assertOrderValid(makerAskOrder, orderValidatorV1);
 
       // Update to 3.01% for royalties
       await royaltyFeeSetter
         .connect(admin)
         .updateRoyaltyInfoForCollection(mockERC721.address, admin.address, royaltyCollector.address, "301");
 
-      assert.equal(
-        await orderValidatorV1.checkOrderValidity(makerAskOrder),
-        MIN_NET_RATIO_ABOVE_ROYALTY_FEE_REGISTRY_AND_PROTOCOL_FEE
-      );
+      await assertErrorCode(makerAskOrder, MIN_NET_RATIO_ABOVE_ROYALTY_FEE_REGISTRY_AND_PROTOCOL_FEE, orderValidatorV1);
 
       const takerBidOrder: TakerOrder = {
         isOrderAsk: false,
@@ -882,7 +881,7 @@ describe("LooksRare Exchange", () => {
         .connect(admin)
         .updateRoyaltyInfoForCollection(mockERC721.address, admin.address, royaltyCollector.address, fee);
 
-      assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), ORDER_EXPECTED_TO_BE_VALID);
+      await assertOrderValid(makerAskOrder, orderValidatorV1);
 
       // Trade is executed
       const tx = await looksRareExchange
@@ -906,7 +905,7 @@ describe("LooksRare Exchange", () => {
           makerAskOrder.price
         );
 
-      assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), NONCE_EXECUTED_OR_CANCELLED);
+      await assertErrorCode(makerAskOrder, NONCE_EXECUTED_OR_CANCELLED, orderValidatorV1);
     });
 
     it("Fee/Royalty - Slippage protection works for TakerAsk", async () => {
@@ -931,7 +930,7 @@ describe("LooksRare Exchange", () => {
         verifyingContract: looksRareExchange.address,
       });
 
-      assert.equal(await orderValidatorV1.checkOrderValidity(makerBidOrder), ORDER_EXPECTED_TO_BE_VALID);
+      await assertOrderValid(makerBidOrder, orderValidatorV1);
 
       const takerAskOrder = createTakerOrder({
         isOrderAsk: true,
@@ -972,7 +971,7 @@ describe("LooksRare Exchange", () => {
           makerBidOrder.price
         );
 
-      assert.equal(await orderValidatorV1.checkOrderValidity(makerBidOrder), NONCE_EXECUTED_OR_CANCELLED);
+      await assertErrorCode(makerBidOrder, NONCE_EXECUTED_OR_CANCELLED, orderValidatorV1);
     });
 
     it("Fee/Royalty/Private Sale - Royalty fee is collected but no platform fee", async () => {
@@ -1000,7 +999,7 @@ describe("LooksRare Exchange", () => {
         verifyingContract: looksRareExchange.address,
       });
 
-      assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), ORDER_EXPECTED_TO_BE_VALID);
+      await assertOrderValid(makerAskOrder, orderValidatorV1);
 
       const takerBidOrder: TakerOrder = {
         isOrderAsk: false,
@@ -1032,7 +1031,7 @@ describe("LooksRare Exchange", () => {
           makerAskOrder.price
         );
 
-      assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), NONCE_EXECUTED_OR_CANCELLED);
+      await assertErrorCode(makerAskOrder, NONCE_EXECUTED_OR_CANCELLED, orderValidatorV1);
       assert.equal(await mockERC721WithRoyalty.ownerOf("0"), takerBidUser.address);
       assert.isTrue(
         await looksRareExchange.isUserOrderNonceExecutedOrCancelled(makerAskUser.address, makerAskOrder.nonce)
@@ -1295,8 +1294,8 @@ describe("LooksRare Exchange", () => {
         verifyingContract: looksRareExchange.address,
       });
 
-      assert.equal(await orderValidatorV1.checkOrderValidity(initialMakerAskOrder), ORDER_EXPECTED_TO_BE_VALID);
-      assert.equal(await orderValidatorV1.checkOrderValidity(adjustedMakerAskOrder), ORDER_EXPECTED_TO_BE_VALID);
+      await assertOrderValid(initialMakerAskOrder, orderValidatorV1);
+      await assertOrderValid(adjustedMakerAskOrder, orderValidatorV1);
 
       const takerBidOrder = createTakerOrder({
         isOrderAsk: false,
@@ -1328,8 +1327,8 @@ describe("LooksRare Exchange", () => {
           adjustedMakerAskOrder.price
         );
 
-      assert.equal(await orderValidatorV1.checkOrderValidity(initialMakerAskOrder), NONCE_EXECUTED_OR_CANCELLED);
-      assert.equal(await orderValidatorV1.checkOrderValidity(adjustedMakerAskOrder), NONCE_EXECUTED_OR_CANCELLED);
+      await assertErrorCode(initialMakerAskOrder, NONCE_EXECUTED_OR_CANCELLED, orderValidatorV1);
+      await assertErrorCode(adjustedMakerAskOrder, NONCE_EXECUTED_OR_CANCELLED, orderValidatorV1);
       assert.equal(await mockERC721.ownerOf("0"), takerBidUser.address);
       assert.isTrue(
         await looksRareExchange.isUserOrderNonceExecutedOrCancelled(makerAskUser.address, adjustedMakerAskOrder.nonce)
@@ -1370,7 +1369,7 @@ describe("LooksRare Exchange", () => {
         verifyingContract: looksRareExchange.address,
       });
 
-      assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), ORDER_EXPECTED_TO_BE_VALID);
+      await assertOrderValid(makerAskOrder, orderValidatorV1);
 
       const takerBidOrder = createTakerOrder({
         isOrderAsk: false,
@@ -1385,7 +1384,7 @@ describe("LooksRare Exchange", () => {
       // Event params are not tested because of array issue with BN
       await expect(tx).to.emit(looksRareExchange, "CancelMultipleOrders");
 
-      assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), NONCE_EXECUTED_OR_CANCELLED);
+      await assertErrorCode(makerAskOrder, NONCE_EXECUTED_OR_CANCELLED, orderValidatorV1);
       await expect(
         looksRareExchange.connect(takerBidUser).matchAskWithTakerBidUsingETHAndWETH(takerBidOrder, makerAskOrder, {
           value: takerBidOrder.price,
@@ -1415,7 +1414,7 @@ describe("LooksRare Exchange", () => {
         verifyingContract: looksRareExchange.address,
       });
 
-      assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), ORDER_EXPECTED_TO_BE_VALID);
+      await assertOrderValid(makerAskOrder, orderValidatorV1);
 
       const takerBidOrder = createTakerOrder({
         isOrderAsk: false,
@@ -1429,7 +1428,7 @@ describe("LooksRare Exchange", () => {
       const tx = await looksRareExchange.connect(makerAskUser).cancelAllOrdersForSender("1");
       await expect(tx).to.emit(looksRareExchange, "CancelAllOrders").withArgs(makerAskUser.address, "1");
 
-      assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), NONCE_BELOW_MIN_ORDER_NONCE);
+      await assertErrorCode(makerAskOrder, NONCE_BELOW_MIN_ORDER_NONCE, orderValidatorV1);
       await expect(
         looksRareExchange.connect(takerBidUser).matchAskWithTakerBidUsingETHAndWETH(takerBidOrder, makerAskOrder, {
           value: takerBidOrder.price,
@@ -1497,7 +1496,7 @@ describe("LooksRare Exchange", () => {
         verifyingContract: looksRareExchange.address,
       });
 
-      assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), ORDER_AMOUNT_CANNOT_BE_ZERO);
+      await assertErrorCode(makerAskOrder, ORDER_AMOUNT_CANNOT_BE_ZERO, orderValidatorV1);
 
       const takerBidOrder: TakerOrder = {
         isOrderAsk: false,
@@ -1704,7 +1703,7 @@ describe("LooksRare Exchange", () => {
         verifyingContract: looksRareExchange.address,
       });
 
-      assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), TOO_EARLY_TO_EXECUTE_ORDER);
+      await assertErrorCode(makerAskOrder, TOO_EARLY_TO_EXECUTE_ORDER, orderValidatorV1);
 
       const takerBidOrder = createTakerOrder({
         isOrderAsk: false,
@@ -1760,7 +1759,8 @@ describe("LooksRare Exchange", () => {
       await expect(
         looksRareExchange.connect(takerAskUser).matchBidWithTakerAsk(takerAskOrder, makerBidOrder)
       ).to.be.revertedWith("Strategy: Execution invalid");
-      assert.equal(await orderValidatorV1.checkOrderValidity(makerBidOrder), TOO_LATE_TO_EXECUTE_ORDER);
+
+      await assertErrorCode(makerBidOrder, TOO_LATE_TO_EXECUTE_ORDER, orderValidatorV1);
     });
 
     it("Currency - Cannot match if currency is removed", async () => {
@@ -1787,7 +1787,7 @@ describe("LooksRare Exchange", () => {
         verifyingContract: looksRareExchange.address,
       });
 
-      assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), CURRENCY_NOT_WHITELISTED);
+      await assertErrorCode(makerAskOrder, CURRENCY_NOT_WHITELISTED, orderValidatorV1);
 
       const takerBidOrder: TakerOrder = {
         isOrderAsk: false,
@@ -1875,7 +1875,7 @@ describe("LooksRare Exchange", () => {
         verifyingContract: looksRareExchange.address,
       });
 
-      assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), CURRENCY_NOT_WHITELISTED);
+      await assertErrorCode(makerAskOrder, CURRENCY_NOT_WHITELISTED, orderValidatorV1);
 
       const takerBidOrder: TakerOrder = {
         isOrderAsk: false,
@@ -1893,7 +1893,7 @@ describe("LooksRare Exchange", () => {
       let tx = await currencyManager.connect(admin).addCurrency(mockUSDT.address);
       await expect(tx).to.emit(currencyManager, "CurrencyWhitelisted").withArgs(mockUSDT.address);
 
-      assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), ORDER_EXPECTED_TO_BE_VALID);
+      await assertOrderValid(makerAskOrder, orderValidatorV1);
 
       tx = await looksRareExchange.connect(takerBidUser).matchAskWithTakerBid(takerBidOrder, makerAskOrder);
       await expect(tx)
@@ -1946,7 +1946,7 @@ describe("LooksRare Exchange", () => {
       let tx = await executionManager.connect(admin).removeStrategy(strategyStandardSaleForFixedPrice.address);
       await expect(tx).to.emit(executionManager, "StrategyRemoved").withArgs(strategyStandardSaleForFixedPrice.address);
 
-      assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), STRATEGY_NOT_WHITELISTED);
+      await assertErrorCode(makerAskOrder, STRATEGY_NOT_WHITELISTED, orderValidatorV1);
 
       await expect(
         looksRareExchange.connect(takerBidUser).matchAskWithTakerBid(takerBidOrder, makerAskOrder)
@@ -1957,7 +1957,7 @@ describe("LooksRare Exchange", () => {
         .to.emit(executionManager, "StrategyWhitelisted")
         .withArgs(strategyStandardSaleForFixedPrice.address);
 
-      assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), ORDER_EXPECTED_TO_BE_VALID);
+      await assertOrderValid(makerAskOrder, orderValidatorV1);
 
       tx = await looksRareExchange.connect(takerBidUser).matchAskWithTakerBid(takerBidOrder, makerAskOrder);
 
@@ -2006,10 +2006,7 @@ describe("LooksRare Exchange", () => {
         verifyingContract: looksRareExchange.address,
       });
 
-      assert.equal(
-        await orderValidatorV1.checkOrderValidity(makerAskOrder),
-        NO_TRANSFER_MANAGER_AVAILABLE_FOR_COLLECTION
-      );
+      await assertErrorCode(makerAskOrder, NO_TRANSFER_MANAGER_AVAILABLE_FOR_COLLECTION, orderValidatorV1);
 
       const takerBidOrder: TakerOrder = {
         isOrderAsk: false,
@@ -2114,10 +2111,10 @@ describe("LooksRare Exchange", () => {
         verifyingContract: looksRareExchange.address,
       });
 
-      assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), ORDER_EXPECTED_TO_BE_VALID);
+      await assertOrderValid(makerAskOrder, orderValidatorV1);
 
       makerAskOrder.v = 29;
-      assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), INVALID_V_PARAMETER_EOA);
+      await assertErrorCode(makerAskOrder, INVALID_V_PARAMETER_EOA, orderValidatorV1);
 
       const takerBidOrder: TakerOrder = {
         isOrderAsk: false,
@@ -2158,7 +2155,7 @@ describe("LooksRare Exchange", () => {
       // The s value is picked randomly to make the condition be rejected
       makerAskOrder.s = "0x9ca0e65dda4b504989e1db8fc30095f24489ee7226465e9545c32fc7853fe985";
 
-      assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), INVALID_S_PARAMETER_EOA);
+      await assertErrorCode(makerAskOrder, INVALID_S_PARAMETER_EOA, orderValidatorV1);
 
       const takerBidOrder: TakerOrder = {
         isOrderAsk: false,
@@ -2203,7 +2200,7 @@ describe("LooksRare Exchange", () => {
         verifyingContract: looksRareExchange.address,
       });
 
-      assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), MAKER_SIGNER_IS_NULL_SIGNER);
+      await assertErrorCode(makerAskOrder, MAKER_SIGNER_IS_NULL_SIGNER, orderValidatorV1);
 
       const takerBidOrder: TakerOrder = {
         isOrderAsk: false,
@@ -2238,7 +2235,7 @@ describe("LooksRare Exchange", () => {
         verifyingContract: looksRareExchange.address,
       });
 
-      assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), WRONG_SIGNER_EOA);
+      await assertErrorCode(makerAskOrder, WRONG_SIGNER_EOA, orderValidatorV1);
 
       const takerBidOrder: TakerOrder = {
         isOrderAsk: false,
