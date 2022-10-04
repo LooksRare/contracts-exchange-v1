@@ -1,4 +1,3 @@
-import { assert, expect } from "chai";
 import { BigNumber, constants, Contract, utils } from "ethers";
 import { ethers } from "hardhat";
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
@@ -18,8 +17,8 @@ import {
   MIN_NET_RATIO_ABOVE_PROTOCOL_FEE,
   MIN_NET_RATIO_ABOVE_ROYALTY_FEE_ERC2981_AND_PROTOCOL_FEE,
   MIN_NET_RATIO_ABOVE_ROYALTY_FEE_REGISTRY_AND_PROTOCOL_FEE,
-  ORDER_EXPECTED_TO_BE_VALID,
 } from "./helpers/configErrorCodes";
+import { assertErrorCode, assertMultipleOrdersValid, assertOrderValid } from "./helpers/order-validation-helper";
 
 const { defaultAbiCoder, parseEther } = utils;
 
@@ -143,10 +142,7 @@ describe("OrderValidatorV1 (additional tests)", () => {
       verifyingContract: looksRareExchange.address,
     });
 
-    expect(await orderValidatorV1.checkMultipleOrderValidities([makerBidOrder, makerAskOrder])).to.eql([
-      BigNumber.from(ORDER_EXPECTED_TO_BE_VALID),
-      BigNumber.from(ORDER_EXPECTED_TO_BE_VALID),
-    ]);
+    assertMultipleOrdersValid([makerBidOrder, makerAskOrder], orderValidatorV1);
   });
 
   it("ERC20 // Can identify issues with approvals and balances for maker bid", async () => {
@@ -171,17 +167,18 @@ describe("OrderValidatorV1 (additional tests)", () => {
       verifyingContract: looksRareExchange.address,
     });
 
-    assert.equal(await orderValidatorV1.checkOrderValidity(makerBidOrder), ERC20_BALANCE_INFERIOR_TO_PRICE);
+    // 1. No WETH
+    await assertErrorCode(makerBidOrder, ERC20_BALANCE_INFERIOR_TO_PRICE, orderValidatorV1);
     await weth.connect(makerBidUser).deposit({ value: makerBidOrder.price });
 
     // 2. Approval allowance inferior to bid price
-    assert.equal(await orderValidatorV1.checkOrderValidity(makerBidOrder), ERC20_APPROVAL_INFERIOR_TO_PRICE);
+    await assertErrorCode(makerBidOrder, ERC20_APPROVAL_INFERIOR_TO_PRICE, orderValidatorV1);
     // Approval allowance lower than price
     await weth.connect(makerBidUser).approve(looksRareExchange.address, makerBidOrder.price.sub("1"));
-    assert.equal(await orderValidatorV1.checkOrderValidity(makerBidOrder), ERC20_APPROVAL_INFERIOR_TO_PRICE);
+    await assertErrorCode(makerBidOrder, ERC20_APPROVAL_INFERIOR_TO_PRICE, orderValidatorV1);
     // Approval allowance equal to price
     await weth.connect(makerBidUser).approve(looksRareExchange.address, makerBidOrder.price);
-    assert.equal(await orderValidatorV1.checkOrderValidity(makerBidOrder), ORDER_EXPECTED_TO_BE_VALID);
+    await assertOrderValid(makerBidOrder, orderValidatorV1);
   });
 
   it("ERC721 // Can identify issues with approvals and balances for maker ask", async () => {
@@ -207,26 +204,27 @@ describe("OrderValidatorV1 (additional tests)", () => {
       verifyingContract: looksRareExchange.address,
     });
 
-    assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), ERC721_TOKEN_ID_DOES_NOT_EXIST);
+    await assertErrorCode(makerAskOrder, ERC721_TOKEN_ID_DOES_NOT_EXIST, orderValidatorV1);
 
     // 2. TokenId is not owned by the signer
     // Minting is incremental so first tokenId minted is 0
     await mockERC721.mint(accounts[5].address);
-    assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), ERC721_TOKEN_ID_NOT_IN_BALANCE);
+    await assertErrorCode(makerAskOrder, ERC721_TOKEN_ID_NOT_IN_BALANCE, orderValidatorV1);
 
     // 3. TokenId is not approved individually
     await mockERC721.connect(accounts[5]).transferFrom(accounts[5].address, makerAskUser.address, tokenId);
-    assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), ERC721_NO_APPROVAL_FOR_ALL_OR_TOKEN_ID);
+    await assertErrorCode(makerAskOrder, ERC721_NO_APPROVAL_FOR_ALL_OR_TOKEN_ID, orderValidatorV1);
     await mockERC721.connect(makerAskUser).approve(transferManagerERC721.address, tokenId);
-    assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), ORDER_EXPECTED_TO_BE_VALID);
+    await assertOrderValid(makerAskOrder, orderValidatorV1);
 
     // 4. TokenId is approved along with all items in the collection by the signer
     // Removes tokenId approval
     await mockERC721.connect(makerAskUser).approve(constants.AddressZero, tokenId);
-    assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), ERC721_NO_APPROVAL_FOR_ALL_OR_TOKEN_ID);
+    await assertErrorCode(makerAskOrder, ERC721_NO_APPROVAL_FOR_ALL_OR_TOKEN_ID, orderValidatorV1);
+
     // Approves all
     await mockERC721.connect(makerAskUser).setApprovalForAll(transferManagerERC721.address, true);
-    assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), ORDER_EXPECTED_TO_BE_VALID);
+    await assertOrderValid(makerAskOrder, orderValidatorV1);
   });
 
   it("ERC1155 // Can identify issues with approvals and balances for maker ask", async () => {
@@ -252,26 +250,20 @@ describe("OrderValidatorV1 (additional tests)", () => {
       verifyingContract: looksRareExchange.address,
     });
 
-    assert.equal(
-      await orderValidatorV1.checkOrderValidity(makerAskOrder),
-      ERC1155_BALANCE_OF_TOKEN_ID_INFERIOR_TO_AMOUNT
-    );
+    await assertErrorCode(makerAskOrder, ERC1155_BALANCE_OF_TOKEN_ID_INFERIOR_TO_AMOUNT, orderValidatorV1);
 
     // 2. Signer has a balanceOf(tokenId) inferior to order amount
     // Mints 1 tokenId=0 (balance = 1)
     await mockERC1155.mint(makerAskUser.address, tokenId, constants.One, defaultAbiCoder.encode([], []));
-    assert.equal(
-      await orderValidatorV1.checkOrderValidity(makerAskOrder),
-      ERC1155_BALANCE_OF_TOKEN_ID_INFERIOR_TO_AMOUNT
-    );
+    await assertErrorCode(makerAskOrder, ERC1155_BALANCE_OF_TOKEN_ID_INFERIOR_TO_AMOUNT, orderValidatorV1);
 
     // Mints 1 tokenId=0 (balance = 2)
     await mockERC1155.mint(makerAskUser.address, tokenId, constants.One, defaultAbiCoder.encode([], []));
-    assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), ERC1155_NO_APPROVAL_FOR_ALL);
+    await assertErrorCode(makerAskOrder, ERC1155_NO_APPROVAL_FOR_ALL, orderValidatorV1);
 
     // 3. Signer approves all
     await mockERC1155.connect(makerAskUser).setApprovalForAll(transferManagerERC1155.address, true);
-    assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), ORDER_EXPECTED_TO_BE_VALID);
+    await assertOrderValid(makerAskOrder, orderValidatorV1);
   });
 
   it("Can identify if NFT transfer manager is not the standard ERC721/ERC1155 transfer contracts", async () => {
@@ -303,7 +295,7 @@ describe("OrderValidatorV1 (additional tests)", () => {
       verifyingContract: looksRareExchange.address,
     });
 
-    assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), CUSTOM_TRANSFER_MANAGER);
+    await assertErrorCode(makerAskOrder, CUSTOM_TRANSFER_MANAGER, orderValidatorV1);
   });
 
   it("Can identify stale orders with MinPercentageToAsk", async () => {
@@ -340,7 +332,7 @@ describe("OrderValidatorV1 (additional tests)", () => {
       verifyingContract: looksRareExchange.address,
     });
 
-    assert.equal(await orderValidatorV1.checkOrderValidity(makerAskOrder), MIN_NET_RATIO_ABOVE_PROTOCOL_FEE);
+    await assertErrorCode(makerAskOrder, MIN_NET_RATIO_ABOVE_PROTOCOL_FEE, orderValidatorV1);
 
     // 2. Protocol fee + Registry royalties (1%)
     const fee = "100"; // 1%
@@ -366,10 +358,7 @@ describe("OrderValidatorV1 (additional tests)", () => {
       verifyingContract: looksRareExchange.address,
     });
 
-    assert.equal(
-      await orderValidatorV1.checkOrderValidity(makerAskOrder),
-      MIN_NET_RATIO_ABOVE_ROYALTY_FEE_REGISTRY_AND_PROTOCOL_FEE
-    );
+    await assertErrorCode(makerAskOrder, MIN_NET_RATIO_ABOVE_ROYALTY_FEE_REGISTRY_AND_PROTOCOL_FEE, orderValidatorV1);
 
     // 3. Protocol fee + ERC2981 royalties (1%)
     makerAskOrder = await createMakerOrder({
@@ -390,9 +379,6 @@ describe("OrderValidatorV1 (additional tests)", () => {
       verifyingContract: looksRareExchange.address,
     });
 
-    assert.equal(
-      await orderValidatorV1.checkOrderValidity(makerAskOrder),
-      MIN_NET_RATIO_ABOVE_ROYALTY_FEE_ERC2981_AND_PROTOCOL_FEE
-    );
+    await assertErrorCode(makerAskOrder, MIN_NET_RATIO_ABOVE_ROYALTY_FEE_ERC2981_AND_PROTOCOL_FEE, orderValidatorV1);
   });
 });

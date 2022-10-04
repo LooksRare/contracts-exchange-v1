@@ -26,9 +26,21 @@ import {LooksRareExchange} from "../LooksRareExchange.sol";
 
 /**
  * @title OrderValidatorV1
+ * @notice This contract is used to check the validity of a maker order in the LooksRareProtocol (v1).
+ *         It performs checks for:
+ *         1. Nonce-related issues (e.g., nonce executed or cancelled)
+ *         2. Amount-related issues (e.g. order amount being 0)
+ *         3. Signature-related issues
+ *         4. Whitelist-related issues (i.e., currency or strategy not whitelisted)
+ *         5. Fee-related issues (e.g., minPercentageToAsk too high due to changes in royalties)
+ *         6. Timestamp-related issues (e.g., order expired)
+ *         7. Transfer-related issues for ERC20/ERC721/ERC1155 (approvals and balances)
  */
 contract OrderValidatorV1 {
     using OrderTypes for OrderTypes.MakerOrder;
+
+    // Number of distinct criteria groups checked to evaluate the validity
+    uint256 public constant CRITERIA_GROUPS = 7;
 
     // ERC721 interfaceID
     bytes4 public constant INTERFACE_ID_ERC721 = 0x80ac58cd;
@@ -57,14 +69,14 @@ contract OrderValidatorV1 {
     // Execution Manager
     IExecutionManager public immutable executionManager;
 
-    // LooksRare Exchange
-    LooksRareExchange public immutable looksRareExchange;
+    // Royalty Fee Registry
+    IRoyaltyFeeRegistry public immutable royaltyFeeRegistry;
 
     // Transfer Selector
     ITransferSelectorNFTExtended public immutable transferSelectorNFT;
 
-    // Royalty Fee Registry
-    IRoyaltyFeeRegistry public immutable royaltyFeeRegistry;
+    // LooksRare Exchange
+    LooksRareExchange public immutable looksRareExchange;
 
     /**
      * @notice Constructor
@@ -95,15 +107,15 @@ contract OrderValidatorV1 {
 
     /**
      * @notice Check the validities for an array of maker orders
-     * @param makerOrders array of maker order structs
-     * @return validationCodes array of validation codes for the array of maker orders
+     * @param makerOrders Array of maker order structs
+     * @return validationCodes Array of validation code arrays for the maker orders
      */
     function checkMultipleOrderValidities(OrderTypes.MakerOrder[] calldata makerOrders)
         public
         view
-        returns (uint256[] memory validationCodes)
+        returns (uint256[][] memory validationCodes)
     {
-        validationCodes = new uint256[](makerOrders.length);
+        validationCodes = new uint256[][](makerOrders.length);
 
         for (uint256 i; i < makerOrders.length; ) {
             validationCodes[i] = checkOrderValidity(makerOrders[i]);
@@ -115,33 +127,28 @@ contract OrderValidatorV1 {
 
     /**
      * @notice Check the validity of a maker order
-     * @param makerOrder maker order struct
-     * @return validationCode validation code for the order
+     * @param makerOrder Maker order struct
+     * @return validationCodes Array of validations code for each group
      */
     function checkOrderValidity(OrderTypes.MakerOrder calldata makerOrder)
         public
         view
-        returns (uint256 validationCode)
+        returns (uint256[] memory validationCodes)
     {
-        uint256 response = checkValidityNonces(makerOrder);
-        if (response != ORDER_EXPECTED_TO_BE_VALID) return response;
-        response = checkValidityAmounts(makerOrder);
-        if (response != ORDER_EXPECTED_TO_BE_VALID) return response;
-        response = checkValiditySignature(makerOrder);
-        if (response != ORDER_EXPECTED_TO_BE_VALID) return response;
-        response = checkValidityWhitelists(makerOrder);
-        if (response != ORDER_EXPECTED_TO_BE_VALID) return response;
-        response = checkValidityMinPercentageToAsk(makerOrder);
-        if (response != ORDER_EXPECTED_TO_BE_VALID) return response;
-        response = checkValidityTimestamps(makerOrder);
-        if (response != ORDER_EXPECTED_TO_BE_VALID) return response;
-        return checkValidityApprovalsAndBalances(makerOrder);
+        validationCodes = new uint256[](CRITERIA_GROUPS);
+        validationCodes[0] = checkValidityNonces(makerOrder);
+        validationCodes[1] = checkValidityAmounts(makerOrder);
+        validationCodes[2] = checkValiditySignature(makerOrder);
+        validationCodes[3] = checkValidityWhitelists(makerOrder);
+        validationCodes[4] = checkValidityMinPercentageToAsk(makerOrder);
+        validationCodes[5] = checkValidityTimestamps(makerOrder);
+        validationCodes[6] = checkValidityApprovalsAndBalances(makerOrder);
     }
 
     /**
-     * @notice Check validity of nonces
-     * @param makerOrder maker order struct
-     * @return validationCode validation code
+     * @notice Check the validity for user nonces
+     * @param makerOrder Maker order struct
+     * @return validationCode Validation code
      */
     function checkValidityNonces(OrderTypes.MakerOrder calldata makerOrder)
         public
@@ -155,9 +162,9 @@ contract OrderValidatorV1 {
     }
 
     /**
-     * @notice Check validity of amounts
-     * @param makerOrder maker order struct
-     * @return validationCode validation code
+     * @notice Check the validity of amounts
+     * @param makerOrder Maker order struct
+     * @return validationCode Validation code
      */
     function checkValidityAmounts(OrderTypes.MakerOrder calldata makerOrder)
         public
@@ -168,9 +175,9 @@ contract OrderValidatorV1 {
     }
 
     /**
-     * @notice Check validity of a signature
-     * @param makerOrder maker order struct
-     * @return validationCode validation code
+     * @notice Check the validity of a signature
+     * @param makerOrder Maker order struct
+     * @return validationCode Validation code
      */
     function checkValiditySignature(OrderTypes.MakerOrder calldata makerOrder)
         public
@@ -189,9 +196,9 @@ contract OrderValidatorV1 {
     }
 
     /**
-     * @notice Check validity of whitelists
-     * @param makerOrder maker order struct
-     * @return validationCode validation code
+     * @notice Check the validity for currency/strategy whitelists
+     * @param makerOrder Maker order struct
+     * @return validationCode Validation code
      */
     function checkValidityWhitelists(OrderTypes.MakerOrder calldata makerOrder)
         public
@@ -201,14 +208,14 @@ contract OrderValidatorV1 {
         // Verify whether the currency is whitelisted
         if (!currencyManager.isCurrencyWhitelisted(makerOrder.currency)) return CURRENCY_NOT_WHITELISTED;
 
-        // Verify whether strategy can be executed
+        // Verify whether the strategy is whitelisted
         if (!executionManager.isStrategyWhitelisted(makerOrder.strategy)) return STRATEGY_NOT_WHITELISTED;
     }
 
     /**
-     * @notice Check validity of min percentage to ask
-     * @param makerOrder maker order struct
-     * @return validationCode validation code
+     * @notice Check the validity of min percentage to ask
+     * @param makerOrder Maker order struct
+     * @return validationCode Validation code
      */
     function checkValidityMinPercentageToAsk(OrderTypes.MakerOrder calldata makerOrder)
         public
@@ -259,9 +266,9 @@ contract OrderValidatorV1 {
     }
 
     /**
-     * @notice Check validity of order timestamps
-     * @param makerOrder maker order struct
-     * @return validationCode validation code
+     * @notice Check the validity of order timestamps
+     * @param makerOrder Maker order struct
+     * @return validationCode Validation code
      */
     function checkValidityTimestamps(OrderTypes.MakerOrder calldata makerOrder)
         public
@@ -273,9 +280,9 @@ contract OrderValidatorV1 {
     }
 
     /**
-     * @notice Check validity of approvals and balances
-     * @param makerOrder maker order struct
-     * @return validationCode validation code
+     * @notice Check the validity of approvals and balances
+     * @param makerOrder Maker order struct
+     * @return validationCode Validation code
      */
     function checkValidityApprovalsAndBalances(OrderTypes.MakerOrder calldata makerOrder)
         public
@@ -291,11 +298,11 @@ contract OrderValidatorV1 {
     }
 
     /**
-     * @notice Check validity of NFT approvals and balances
-     * @param collection address of the collection
-     * @param user address of the user
-     * @param tokenId tokenId
-     * @param amount amount
+     * @notice Check the validity of NFT approvals and balances
+     * @param collection Collection address
+     * @param user User address
+     * @param tokenId TokenId
+     * @param amount Amount
      */
     function _validateNFTApprovals(
         address collection,
@@ -325,10 +332,10 @@ contract OrderValidatorV1 {
     }
 
     /**
-     * @notice Check validity of ERC20 approvals and balances required to process the order
-     * @param currency address of the currency
-     * @param user address of the user
-     * @param price price (defined by the maker order)
+     * @notice Check the validity of ERC20 approvals and balances that are required to process the maker bid order
+     * @param currency Currency address
+     * @param user User address
+     * @param price Price (defined by the maker order)
      */
     function _validateERC20(
         address currency,
@@ -341,11 +348,11 @@ contract OrderValidatorV1 {
     }
 
     /**
-     * @notice Check validity of ERC721 approvals and balances required to process the order
-     * @param collection address of the collection
-     * @param user address of the user
-     * @param transferManager address of the transfer manager
-     * @param tokenId tokenId
+     * @notice Check the validity of ERC721 approvals and balances required to process the maker ask order
+     * @param collection Collection address
+     * @param user User address
+     * @param transferManager Transfer manager address
+     * @param tokenId TokenId
      */
     function _validateERC721AndEquivalents(
         address collection,
@@ -385,12 +392,12 @@ contract OrderValidatorV1 {
     }
 
     /**
-     * @notice Check validity of ERC1155 approvals and balances required to process the order
-     * @param collection address of the collection
-     * @param user address of the user
-     * @param transferManager address of the transfer manager
-     * @param tokenId tokenId
-     * @param amount amount
+     * @notice Check the validity of ERC1155 approvals and balances required to process the maker ask order
+     * @param collection Collection address
+     * @param user User address
+     * @param transferManager Transfer manager address
+     * @param tokenId TokenId
+     * @param amount Amount
      */
     function _validateERC1155(
         address collection,
@@ -415,12 +422,12 @@ contract OrderValidatorV1 {
     }
 
     /**
-     * @notice Check validity of EOA maker order
-     * @param digest digest
-     * @param targetSigner the signer address to confirm message validity
-     * @param v parameter (27 or 28)
-     * @param r parameter
-     * @param s parameter
+     * @notice Check the validity of EOA maker order
+     * @param digest Digest
+     * @param targetSigner Expected signer address to confirm message validity
+     * @param v V parameter (27 or 28)
+     * @param r R parameter
+     * @param s S parameter
      */
     function _validateEOA(
         bytes32 digest,
@@ -440,12 +447,12 @@ contract OrderValidatorV1 {
     }
 
     /**
-     * @notice Check validity of ERC-1271 maker order
-     * @param digest digest
-     * @param targetSigner the signer address to confirm message validity
-     * @param v parameter (27 or 28)
-     * @param r parameter
-     * @param s parameter
+     * @notice Check the validity for EIP1271 maker order
+     * @param digest Digest
+     * @param targetSigner Expected signer address to confirm message validity
+     * @param v V parameter (27 or 28)
+     * @param r R parameter
+     * @param s S parameter
      */
     function _validateERC1271(
         bytes32 digest,
