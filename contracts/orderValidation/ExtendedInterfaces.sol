@@ -10,7 +10,7 @@ interface IRoyaltyFeeManagerExtended is IRoyaltyFeeManager {
 }
 
 interface IRoyaltyFeeManagerV1BExtended is IRoyaltyFeeManager {
-    function standardRoyaltyFee() external view returns (uint256);
+    function STANDARD_ROYALTY_FEE() external view returns (uint256);
 
     function royaltyFeeRegistry() external view returns (IRoyaltyFeeRegistry);
 }

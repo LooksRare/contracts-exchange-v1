@@ -16,7 +16,7 @@ contract RoyaltyFeeManagerV1B is IRoyaltyFeeManager, Ownable {
     IRoyaltyFeeRegistry public immutable royaltyFeeRegistry;
 
     // Standard royalty fee
-    uint256 public standardRoyaltyFee = 50;
+    uint256 public constant STANDARD_ROYALTY_FEE = 50;
 
     /**
      * @notice Constructor
@@ -52,7 +52,7 @@ contract RoyaltyFeeManagerV1B is IRoyaltyFeeManager, Ownable {
 
         // A fixed royalty fee is applied
         if (receiver != address(0)) {
-            royaltyAmount = (standardRoyaltyFee * amount) / 10000;
+            royaltyAmount = (STANDARD_ROYALTY_FEE * amount) / 10000;
         }
     }
 }

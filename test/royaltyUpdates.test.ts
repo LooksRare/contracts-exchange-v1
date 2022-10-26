@@ -105,7 +105,7 @@ describe("LooksRare Exchange post-royalty change", () => {
     orderValidatorV1B = await OrderValidatorV1B.deploy(looksRareExchange.address);
     await orderValidatorV1B.deployed();
 
-    standardRoyaltyFee = await royaltyFeeManagerV1B.standardRoyaltyFee();
+    standardRoyaltyFee = await royaltyFeeManagerV1B.STANDARD_ROYALTY_FEE();
 
     const StrategyStandardSaleForFixedPriceV1B = await ethers.getContractFactory(
       "StrategyStandardSaleForFixedPriceV1B"

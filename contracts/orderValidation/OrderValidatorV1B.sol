@@ -240,7 +240,7 @@ contract OrderValidatorV1B {
 
         if ((finalSellerAmount * 10000) < minNetPriceToAsk) return MIN_NET_RATIO_ABOVE_PROTOCOL_FEE;
 
-        uint256 royaltyFeeAmount = (makerOrder.price * royaltyFeeManager.standardRoyaltyFee()) / 10000;
+        uint256 royaltyFeeAmount = (makerOrder.price * royaltyFeeManager.STANDARD_ROYALTY_FEE()) / 10000;
 
         (address receiver, ) = royaltyFeeRegistry.royaltyInfo(makerOrder.collection, makerOrder.price);
 
