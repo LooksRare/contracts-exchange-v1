@@ -9,6 +9,12 @@ interface IRoyaltyFeeManagerExtended is IRoyaltyFeeManager {
     function royaltyFeeRegistry() external view returns (IRoyaltyFeeRegistry);
 }
 
+interface IRoyaltyFeeManagerV1BExtended is IRoyaltyFeeManager {
+    function standardRoyaltyFee() external view returns (uint256);
+
+    function royaltyFeeRegistry() external view returns (IRoyaltyFeeRegistry);
+}
+
 interface ITransferSelectorNFTExtended is ITransferSelectorNFT {
     function TRANSFER_MANAGER_ERC721() external view returns (address);
 
