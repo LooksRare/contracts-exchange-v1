@@ -63,6 +63,9 @@ contract OrderValidatorV1B {
     // Domain separator from LooksRare Exchange
     bytes32 public immutable DOMAIN_SEPARATOR;
 
+    // Standard royalty fee
+    uint256 public immutable STANDARD_ROYALTY_FEE;
+
     // Currency Manager
     ICurrencyManager public immutable currencyManager;
 
@@ -71,9 +74,6 @@ contract OrderValidatorV1B {
 
     // Royalty Fee Registry
     IRoyaltyFeeRegistry public immutable royaltyFeeRegistry;
-
-    // Royalty Fee Manager 1B
-    IRoyaltyFeeManagerV1BExtended public immutable royaltyFeeManager;
 
     // Transfer Selector
     ITransferSelectorNFTExtended public immutable transferSelectorNFT;
@@ -103,13 +103,13 @@ contract OrderValidatorV1B {
             address(LooksRareExchange(_looksRareExchange).transferSelectorNFT())
         );
 
-        royaltyFeeManager = IRoyaltyFeeManagerV1BExtended(
-            address(LooksRareExchange(_looksRareExchange).royaltyFeeManager())
-        );
-
         royaltyFeeRegistry = IRoyaltyFeeManagerV1BExtended(
             address(LooksRareExchange(_looksRareExchange).royaltyFeeManager())
         ).royaltyFeeRegistry();
+
+        STANDARD_ROYALTY_FEE = IRoyaltyFeeManagerV1BExtended(
+            address(LooksRareExchange(_looksRareExchange).royaltyFeeManager())
+        ).STANDARD_ROYALTY_FEE();
     }
 
     /**
@@ -240,7 +240,7 @@ contract OrderValidatorV1B {
 
         if ((finalSellerAmount * 10000) < minNetPriceToAsk) return MIN_NET_RATIO_ABOVE_PROTOCOL_FEE;
 
-        uint256 royaltyFeeAmount = (makerOrder.price * royaltyFeeManager.STANDARD_ROYALTY_FEE()) / 10000;
+        uint256 royaltyFeeAmount = (makerOrder.price * STANDARD_ROYALTY_FEE) / 10000;
 
         (address receiver, ) = royaltyFeeRegistry.royaltyInfo(makerOrder.collection, makerOrder.price);
 

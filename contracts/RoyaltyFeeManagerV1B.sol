@@ -12,11 +12,11 @@ import {IRoyaltyFeeRegistry} from "./interfaces/IRoyaltyFeeRegistry.sol";
  * @notice It handles the logic to check and transfer rebate fees (if any).
  */
 contract RoyaltyFeeManagerV1B is IRoyaltyFeeManager, Ownable {
-    // Royalty fee registry
-    IRoyaltyFeeRegistry public immutable royaltyFeeRegistry;
-
     // Standard royalty fee
     uint256 public constant STANDARD_ROYALTY_FEE = 50;
+
+    // Royalty fee registry
+    IRoyaltyFeeRegistry public immutable royaltyFeeRegistry;
 
     /**
      * @notice Constructor
