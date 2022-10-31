@@ -12,6 +12,9 @@ import {IRoyaltyFeeRegistry} from "./interfaces/IRoyaltyFeeRegistry.sol";
  * @notice It handles the logic to check and transfer rebate fees (if any).
  */
 contract RoyaltyFeeManagerV1B is IRoyaltyFeeManager, Ownable {
+    // Interface Id ERC2981
+    bytes4 public constant INTERFACE_ID_ERC2981 = 0x2a55205a;
+
     // Standard royalty fee
     uint256 public constant STANDARD_ROYALTY_FEE = 50;
 
@@ -42,11 +45,13 @@ contract RoyaltyFeeManagerV1B is IRoyaltyFeeManager, Ownable {
 
         // 2. If the receiver is address(0), check if it supports the ERC2981 interface
         if (receiver == address(0)) {
-            (bool status, bytes memory data) = collection.staticcall(
-                abi.encodeWithSelector(IERC2981.royaltyInfo.selector, tokenId, amount)
-            );
-            if (status) {
-                (receiver, ) = abi.decode(data, (address, uint256));
+            if (IERC2981(collection).supportsInterface(INTERFACE_ID_ERC2981)) {
+                (bool status, bytes memory data) = collection.staticcall(
+                    abi.encodeWithSelector(IERC2981.royaltyInfo.selector, tokenId, amount)
+                );
+                if (status) {
+                    (receiver, ) = abi.decode(data, (address, uint256));
+                }
             }
         }
 
