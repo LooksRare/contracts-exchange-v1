@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IERC2981} from "@openzeppelin/contracts/interfaces/IERC2981.sol";
 
 import {IRoyaltyFeeManager} from "./interfaces/IRoyaltyFeeManager.sol";
@@ -11,7 +10,7 @@ import {IRoyaltyFeeRegistry} from "./interfaces/IRoyaltyFeeRegistry.sol";
  * @title RoyaltyFeeManagerV1B
  * @notice It handles the logic to check and transfer rebate fees (if any).
  */
-contract RoyaltyFeeManagerV1B is IRoyaltyFeeManager, Ownable {
+contract RoyaltyFeeManagerV1B is IRoyaltyFeeManager {
     // Interface Id ERC2981
     bytes4 public constant INTERFACE_ID_ERC2981 = 0x2a55205a;
 
