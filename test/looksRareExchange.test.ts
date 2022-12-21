@@ -6,7 +6,7 @@ import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
 import { increaseTo } from "./helpers/block-traveller";
 import { MakerOrderWithSignature, TakerOrder } from "./helpers/order-types";
 import { createMakerOrder, createTakerOrder } from "./helpers/order-helper";
-import { computeDomainSeparator, computeOrderHash } from "./helpers/signature-helper";
+import { computeDomainSeparator, computeOrderHash, computeOrderDigest } from "./helpers/signature-helper";
 import { setUp } from "./test-setup";
 import { tokenSetUp } from "./token-set-up";
 
@@ -532,6 +532,200 @@ describe("LooksRare Exchange", () => {
       // Withdraw WETH back
       await mockSignerContract.connect(userSigningThroughContract).withdrawERC20(weth.address);
       assert.deepEqual(await weth.balanceOf(mockSignerContract.address), constants.Zero);
+    });
+
+    it("ERC1271/Contract No Signature - MakerBid order is matched by TakerAsk order", async () => {
+      const userSigningThroughContract = accounts[1];
+      const takerAskUser = accounts[2];
+
+      const MockNSSignerContract = await ethers.getContractFactory("MockNSSignerContract");
+      const mockNSSignerContract = await MockNSSignerContract.connect(userSigningThroughContract).deploy();
+      await mockNSSignerContract.deployed();
+
+      await weth.connect(userSigningThroughContract).transfer(mockNSSignerContract.address, parseEther("1"));
+      await mockNSSignerContract
+        .connect(userSigningThroughContract)
+        .approveERC20ToBeSpent(weth.address, looksRareExchange.address);
+
+      const makerBidOrder = await createMakerOrder({
+        isOrderAsk: false,
+        signer: mockNSSignerContract.address,
+        collection: mockERC721.address,
+        tokenId: constants.One,
+        price: parseEther("1"),
+        amount: constants.One,
+        strategy: strategyStandardSaleForFixedPrice.address,
+        currency: weth.address,
+        nonce: constants.Zero,
+        startTime: startTimeOrder,
+        endTime: endTimeOrder,
+        minPercentageToAsk: constants.Zero,
+        params: defaultAbiCoder.encode([], []),
+        signerUser: userSigningThroughContract,
+        verifyingContract: looksRareExchange.address,
+      });
+      // no signature, approve hash instead
+      makerBidOrder.signature = "0x";
+      const orderDigest = computeOrderDigest(looksRareExchange.address, makerBidOrder);
+      await mockNSSignerContract.connect(userSigningThroughContract).approveHash(orderDigest, true);
+
+      const takerAskOrder = createTakerOrder({
+        isOrderAsk: true,
+        taker: takerAskUser.address,
+        tokenId: makerBidOrder.tokenId,
+        price: makerBidOrder.price,
+        minPercentageToAsk: constants.Zero,
+        params: defaultAbiCoder.encode([], []),
+      });
+
+      const tx = await looksRareExchange.connect(takerAskUser).matchBidWithTakerAsk(takerAskOrder, makerBidOrder);
+      await expect(tx)
+        .to.emit(looksRareExchange, "TakerAsk")
+        .withArgs(
+          computeOrderHash(makerBidOrder),
+          makerBidOrder.nonce,
+          takerAskUser.address,
+          mockNSSignerContract.address,
+          strategyStandardSaleForFixedPrice.address,
+          makerBidOrder.currency,
+          makerBidOrder.collection,
+          takerAskOrder.tokenId,
+          makerBidOrder.amount,
+          makerBidOrder.price
+        );
+
+      // Verify funds/tokens were transferred
+      assert.equal(await mockERC721.ownerOf("1"), mockNSSignerContract.address);
+      assert.isTrue(
+        await looksRareExchange.isUserOrderNonceExecutedOrCancelled(mockNSSignerContract.address, makerBidOrder.nonce)
+      );
+
+      // Withdraw it back
+      await mockNSSignerContract.connect(userSigningThroughContract).withdrawERC721NFT(mockERC721.address, "1");
+      assert.equal(await mockERC721.ownerOf("1"), userSigningThroughContract.address);
+    });
+
+    it("ERC1271/Contract No Signature - MakerAsk order is matched by TakerBid order", async () => {
+      const userSigningThroughContract = accounts[1];
+      const takerBidUser = accounts[2];
+      const MockNSSignerContract = await ethers.getContractFactory("MockNSSignerContract");
+      const mockNSSignerContract = await MockNSSignerContract.connect(userSigningThroughContract).deploy();
+      await mockNSSignerContract.deployed();
+
+      await mockERC721
+        .connect(userSigningThroughContract)
+        .transferFrom(userSigningThroughContract.address, mockNSSignerContract.address, "0");
+
+      await mockNSSignerContract
+        .connect(userSigningThroughContract)
+        .approveERC721NFT(mockERC721.address, transferManagerERC721.address);
+
+      const makerAskOrder = await createMakerOrder({
+        isOrderAsk: true,
+        signer: mockNSSignerContract.address,
+        collection: mockERC721.address,
+        tokenId: constants.Zero,
+        price: parseEther("1"),
+        amount: constants.One,
+        strategy: strategyStandardSaleForFixedPrice.address,
+        currency: weth.address,
+        nonce: constants.Zero,
+        startTime: startTimeOrder,
+        endTime: endTimeOrder,
+        minPercentageToAsk: constants.Zero,
+        params: defaultAbiCoder.encode([], []),
+        signerUser: userSigningThroughContract,
+        verifyingContract: looksRareExchange.address,
+      });
+      // no signature, approve hash instead
+      makerAskOrder.signature = "0x";
+      const orderDigest = computeOrderDigest(looksRareExchange.address, makerAskOrder);
+      await mockNSSignerContract.connect(userSigningThroughContract).approveHash(orderDigest, true);
+
+      const takerBidOrder = createTakerOrder({
+        isOrderAsk: false,
+        taker: takerBidUser.address,
+        tokenId: makerAskOrder.tokenId,
+        price: makerAskOrder.price,
+        minPercentageToAsk: constants.Zero,
+        params: defaultAbiCoder.encode([], []),
+      });
+
+      const tx = await looksRareExchange.connect(takerBidUser).matchAskWithTakerBid(takerBidOrder, makerAskOrder);
+      await expect(tx)
+        .to.emit(looksRareExchange, "TakerBid")
+        .withArgs(
+          computeOrderHash(makerAskOrder),
+          makerAskOrder.nonce,
+          takerBidUser.address,
+          mockNSSignerContract.address,
+          strategyStandardSaleForFixedPrice.address,
+          makerAskOrder.currency,
+          makerAskOrder.collection,
+          takerBidOrder.tokenId,
+          makerAskOrder.amount,
+          makerAskOrder.price
+        );
+
+      // Verify funds/tokens were transferred
+      assert.equal(await mockERC721.ownerOf("1"), takerBidUser.address);
+      assert.deepEqual(
+        await weth.balanceOf(mockNSSignerContract.address),
+        takerBidOrder.price.mul("9800").div("10000")
+      );
+
+      assert.isTrue(
+        await looksRareExchange.isUserOrderNonceExecutedOrCancelled(mockNSSignerContract.address, makerAskOrder.nonce)
+      );
+
+      // Withdraw WETH back
+      await mockNSSignerContract.connect(userSigningThroughContract).withdrawERC20(weth.address);
+      assert.deepEqual(await weth.balanceOf(mockNSSignerContract.address), constants.Zero);
+    });
+
+    it("ERC1271/Contract No Signature - fails if an order is not approved", async () => {
+      const userSigningThroughContract = accounts[1];
+      const takerAskUser = accounts[2];
+
+      const MockNSSignerContract = await ethers.getContractFactory("MockNSSignerContract");
+      const mockNSSignerContract = await MockNSSignerContract.connect(userSigningThroughContract).deploy();
+      await mockNSSignerContract.deployed();
+
+      await weth.connect(userSigningThroughContract).transfer(mockNSSignerContract.address, parseEther("1"));
+      await mockNSSignerContract
+        .connect(userSigningThroughContract)
+        .approveERC20ToBeSpent(weth.address, looksRareExchange.address);
+
+      const makerBidOrder = await createMakerOrder({
+        isOrderAsk: false,
+        signer: mockNSSignerContract.address,
+        collection: mockERC721.address,
+        tokenId: constants.One,
+        price: parseEther("1"),
+        amount: constants.One,
+        strategy: strategyStandardSaleForFixedPrice.address,
+        currency: weth.address,
+        nonce: constants.Zero,
+        startTime: startTimeOrder,
+        endTime: endTimeOrder,
+        minPercentageToAsk: constants.Zero,
+        params: defaultAbiCoder.encode([], []),
+        signerUser: userSigningThroughContract,
+        verifyingContract: looksRareExchange.address,
+      });
+
+      const takerAskOrder = createTakerOrder({
+        isOrderAsk: true,
+        taker: takerAskUser.address,
+        tokenId: makerBidOrder.tokenId,
+        price: makerBidOrder.price,
+        minPercentageToAsk: constants.Zero,
+        params: defaultAbiCoder.encode([], []),
+      });
+
+      await expect(
+        looksRareExchange.connect(takerAskUser).matchBidWithTakerAsk(takerAskOrder, makerBidOrder)
+      ).to.be.revertedWith("Signature: Invalid");
     });
   });
 
@@ -2019,7 +2213,8 @@ describe("LooksRare Exchange", () => {
         verifyingContract: looksRareExchange.address,
       });
 
-      makerAskOrder.v = 29;
+      // signature.v = 29;
+      makerAskOrder.signature = makerAskOrder.signature.toString().substring(0, 130) + "1d";
 
       const takerBidOrder: TakerOrder = {
         isOrderAsk: false,
@@ -2032,7 +2227,7 @@ describe("LooksRare Exchange", () => {
 
       await expect(
         looksRareExchange.connect(takerBidUser).matchAskWithTakerBid(takerBidOrder, makerAskOrder)
-      ).to.be.revertedWith("Signature: Invalid v parameter");
+      ).to.be.revertedWith("ECDSA: invalid signature 'v' value");
     });
 
     it("SignatureChecker - Cannot match if invalid s parameter", async () => {
@@ -2058,7 +2253,11 @@ describe("LooksRare Exchange", () => {
       });
 
       // The s value is picked randomly to make the condition be rejected
-      makerAskOrder.s = "0x9ca0e65dda4b504989e1db8fc30095f24489ee7226465e9545c32fc7853fe985";
+      // signature.s = 0x9ca0e65dda4b504989e1db8fc30095f24489ee7226465e9545c32fc7853fe985;
+      makerAskOrder.signature =
+        makerAskOrder.signature.toString().substring(0, 66) +
+        "9ca0e65dda4b504989e1db8fc30095f24489ee7226465e9545c32fc7853fe985" +
+        makerAskOrder.signature.toString().substring(130, 132);
 
       const takerBidOrder: TakerOrder = {
         isOrderAsk: false,
@@ -2071,7 +2270,7 @@ describe("LooksRare Exchange", () => {
 
       await expect(
         looksRareExchange.connect(takerBidUser).matchAskWithTakerBid(takerBidOrder, makerAskOrder)
-      ).to.be.revertedWith("Signature: Invalid s parameter");
+      ).to.be.revertedWith("ECDSA: invalid signature 's' value");
     });
 
     it("Order - Cannot cancel if no order", async () => {

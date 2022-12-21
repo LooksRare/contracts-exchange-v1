@@ -16,9 +16,7 @@ abstract contract TestParameters {
     uint256 internal _TOKEN_ID = 1;
     uint256 internal _MIN_PERCENTAGE_TO_ASK = 8500;
     bytes internal _TAKER_PARAMS;
-    uint8 internal _V = 27;
-    bytes32 internal _R;
-    bytes32 internal _S;
+    bytes internal _SIGNATURE;
 
     // Dutch Auction constructor parameters
     uint256 internal _PROTOCOL_FEE = 200;
@@ -70,9 +68,7 @@ contract StrategyDutchAuctionTest is TestHelpers, TestParameters {
             endTime,
             _MIN_PERCENTAGE_TO_ASK,
             makerParams,
-            _V,
-            _R,
-            _S
+            _SIGNATURE
         );
 
         (bool canExecute, , ) = strategyDutchAuction.canExecuteTakerBid(takerBidOrder, makerAskOrder);

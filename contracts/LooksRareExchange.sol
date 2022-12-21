@@ -611,14 +611,7 @@ contract LooksRareExchange is ILooksRareExchange, ReentrancyGuard, Ownable {
 
         // Verify the validity of the signature
         require(
-            SignatureChecker.verify(
-                orderHash,
-                makerOrder.signer,
-                makerOrder.v,
-                makerOrder.r,
-                makerOrder.s,
-                DOMAIN_SEPARATOR
-            ),
+            SignatureChecker.verify(orderHash, makerOrder.signer, makerOrder.signature, DOMAIN_SEPARATOR),
             "Signature: Invalid"
         );
 

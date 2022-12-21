@@ -1,4 +1,5 @@
 import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
+import { utils } from "ethers";
 import { MakerOrder, MakerOrderWithSignature, TakerOrder } from "./order-types";
 import { signMakerOrder } from "./signature-helper";
 
@@ -45,9 +46,7 @@ export async function createMakerOrder({
   // Extend makerOrder with proper signature
   const makerOrderExtended: MakerOrderWithSignature = {
     ...makerOrder,
-    r: signedOrder.r,
-    s: signedOrder.s,
-    v: signedOrder.v,
+    signature: utils.joinSignature(signedOrder),
   };
 
   return makerOrderExtended;

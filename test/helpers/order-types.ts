@@ -1,4 +1,4 @@
-import { BigNumber, BigNumberish, BytesLike } from "ethers";
+import { BigNumber, BytesLike } from "ethers";
 
 export interface MakerOrder {
   isOrderAsk: boolean; // true if ask, false if bid
@@ -17,9 +17,7 @@ export interface MakerOrder {
 }
 
 export interface MakerOrderWithSignature extends MakerOrder {
-  r: BytesLike; // r: parameter
-  s: BytesLike; // s: parameter
-  v: BigNumberish; // v: parameter (27 or 28)
+  signature: BytesLike; // eip712 or eip1271 signature
 }
 
 export interface TakerOrder {

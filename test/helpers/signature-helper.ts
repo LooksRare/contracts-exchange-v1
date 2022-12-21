@@ -101,6 +101,21 @@ export const computeOrderHash = (order: MakerOrder): string => {
 };
 
 /**
+ * Compute order digest for a maker order, EIP712 structure
+ * @param order MakerOrder
+ * @returns digest
+ */
+export const computeOrderDigest = (verifyingContract: string, order: MakerOrder): string => {
+  const hash = computeOrderHash(order);
+  const domainSeparator = computeDomainSeparator(verifyingContract);
+  // Compute the digest
+  const digest = keccak256(
+    solidityPack(["bytes1", "bytes1", "bytes32", "bytes32"], ["0x19", "0x01", domainSeparator, hash])
+  );
+  return digest;
+};
+
+/**
  * Create a signature for a maker order
  * @param signer signer for the order
  * @param verifyingContract verifying contract address

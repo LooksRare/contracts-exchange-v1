@@ -2,6 +2,7 @@
 pragma solidity ^0.8.0;
 
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
+import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {IERC1271} from "@openzeppelin/contracts/interfaces/IERC1271.sol";
 
 /**
@@ -42,18 +43,14 @@ library SignatureChecker {
      * @notice Returns whether the signer matches the signed message
      * @param hash the hash containing the signed mesage
      * @param signer the signer address to confirm message validity
-     * @param v parameter (27 or 28)
-     * @param r parameter
-     * @param s parameter
-     * @param domainSeparator paramer to prevent signature being executed in other chains and environments
+     * @param signature eip712 or eip1271
+     * @param domainSeparator parameter to prevent signature being executed in other chains and environments
      * @return true --> if valid // false --> if invalid
      */
     function verify(
         bytes32 hash,
         address signer,
-        uint8 v,
-        bytes32 r,
-        bytes32 s,
+        bytes memory signature,
         bytes32 domainSeparator
     ) internal view returns (bool) {
         // \x19\x01 is the standardized encoding prefix
@@ -61,9 +58,9 @@ library SignatureChecker {
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", domainSeparator, hash));
         if (Address.isContract(signer)) {
             // 0x1626ba7e is the interfaceId for signature contracts (see IERC1271)
-            return IERC1271(signer).isValidSignature(digest, abi.encodePacked(r, s, v)) == 0x1626ba7e;
+            return IERC1271(signer).isValidSignature(digest, signature) == 0x1626ba7e;
         } else {
-            return recover(digest, v, r, s) == signer;
+            return ECDSA.recover(digest, signature) == signer;
         }
     }
 }
