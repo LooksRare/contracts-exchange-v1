@@ -1,6 +1,7 @@
 import type { HardhatUserConfig } from "hardhat/types";
 import { task } from "hardhat/config";
 
+import "@nomiclabs/hardhat-ethers";
 import "@nomiclabs/hardhat-etherscan";
 import "@nomiclabs/hardhat-waffle";
 import "@typechain/hardhat";
@@ -25,6 +26,15 @@ const config: HardhatUserConfig = {
         interval: 50000,
       },
       gasPrice: "auto",
+    },
+    goerli: {
+      url: "https://goerli.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161",
+      chainId: 5,
+      accounts: [`${process.env.PRIVATE_KEY}`],
+    },
+    mainnet: {
+      url: "https://mainnet.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161",
+      accounts: [`${process.env.PRIVATE_KEY}`],
     },
   },
   etherscan: {
