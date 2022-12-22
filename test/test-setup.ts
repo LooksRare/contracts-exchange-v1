@@ -84,7 +84,7 @@ export async function setUp(
   await royaltyFeeSetter.deployed();
   const RoyaltyFeeManager = await ethers.getContractFactory("RoyaltyFeeManager");
   const royaltyFeeManager = await RoyaltyFeeManager.deploy(royaltyFeeRegistry.address);
-  await royaltyFeeSetter.deployed();
+  await royaltyFeeManager.deployed();
   // Transfer ownership of RoyaltyFeeRegistry to RoyaltyFeeSetter
   await royaltyFeeRegistry.connect(admin).transferOwnership(royaltyFeeSetter.address);
 
