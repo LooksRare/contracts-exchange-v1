@@ -66,9 +66,13 @@ export async function setUp(
   const StrategyStandardSaleForFixedPrice = await ethers.getContractFactory("StrategyStandardSaleForFixedPrice");
   const strategyStandardSaleForFixedPrice = await StrategyStandardSaleForFixedPrice.deploy(standardProtocolFee);
   await strategyStandardSaleForFixedPrice.deployed();
+  const StrategyPartialSaleForFixedPrice = await ethers.getContractFactory("StrategyPartialSaleForFixedPrice");
+  const strategyPartialSaleForFixedPrice = await StrategyPartialSaleForFixedPrice.deploy(standardProtocolFee);
+  await strategyPartialSaleForFixedPrice.deployed();
 
   // Whitelist these five strategies
   await executionManager.connect(admin).addStrategy(strategyStandardSaleForFixedPrice.address);
+  await executionManager.connect(admin).addStrategy(strategyPartialSaleForFixedPrice.address);
   await executionManager.connect(admin).addStrategy(strategyAnyItemFromCollectionForFixedPrice.address);
   await executionManager.connect(admin).addStrategy(strategyAnyItemInASetForFixedPrice.address);
   await executionManager.connect(admin).addStrategy(strategyDutchAuction.address);
@@ -144,5 +148,6 @@ export async function setUp(
     royaltyFeeRegistry,
     royaltyFeeManager,
     royaltyFeeSetter,
+    strategyPartialSaleForFixedPrice,
   ];
 }

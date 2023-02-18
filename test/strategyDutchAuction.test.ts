@@ -65,6 +65,7 @@ describe("Strategy - Dutch Auction", () => {
       ,
       ,
       ,
+      ,
     ] = await setUp(admin, feeRecipient, royaltyCollector, standardProtocolFee, royaltyFeeLimit);
 
     await tokenSetUp(
