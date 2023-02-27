@@ -9,7 +9,7 @@ export async function setUp(
   standardProtocolFee: BigNumber,
   royaltyFeeLimit: BigNumber
 ): Promise<Contract[]> {
-  /** 1. Deploy WETH, Mock ERC721, Mock ERC1155, Mock USDT, MockERC721WithRoyalty
+  /** 1. Deploy WETH, Mock ERC721, Mock ERC1155, Mock USDT, MockERC721WithRoyalty, MinimalForwarder
    */
   const WETH = await ethers.getContractFactory("WETH");
   const weth = await WETH.deploy();
@@ -30,6 +30,9 @@ export async function setUp(
     "200" // 2% royalty fee
   );
   await mockERC721WithRoyalty.deployed();
+  const MinimalForwarder = await ethers.getContractFactory("CheckMinimalForwarder");
+  const minimalForwarder = await MinimalForwarder.deploy();
+  await minimalForwarder.deployed();
 
   /** 2. Deploy ExecutionManager contract and add WETH to whitelisted currencies
    */
@@ -100,7 +103,8 @@ export async function setUp(
     executionManager.address,
     royaltyFeeManager.address,
     weth.address,
-    feeRecipient.address
+    feeRecipient.address,
+    minimalForwarder.address
   );
   await looksRareExchange.deployed();
 
@@ -149,5 +153,6 @@ export async function setUp(
     royaltyFeeManager,
     royaltyFeeSetter,
     strategyPartialSaleForFixedPrice,
+    minimalForwarder,
   ];
 }

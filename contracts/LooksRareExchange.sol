@@ -5,6 +5,8 @@ pragma solidity ^0.8.0;
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import {IERC20, SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {Context} from "@openzeppelin/contracts/utils/Context.sol";
+import {ERC2771Context} from "@openzeppelin/contracts/metatx/ERC2771Context.sol";
 
 // LooksRare interfaces
 import {ICurrencyManager} from "./interfaces/ICurrencyManager.sol";
@@ -57,7 +59,7 @@ LOOKSRARELOOKSRARELOOKSRLOOKSRARELOOKSRo'        'oLOOKSRARELOOKSRLOOKSRARELOOKS
 LOOKSRARELOOKSRARELOOKSRLOOKSRARELOOKSRARE,.  .,dRELOOKSRARELOOKSRLOOKSRARELOOKSRARELOOKSR
 LOOKSRARELOOKSRARELOOKSRLOOKSRARELOOKSRARELOOKSRARELOOKSRARELOOKSRLOOKSRARELOOKSRARELOOKSR
  */
-contract LooksRareExchange is ILooksRareExchange, ReentrancyGuard, Ownable {
+contract LooksRareExchange is ILooksRareExchange, ReentrancyGuard, Ownable, ERC2771Context {
     using SafeERC20 for IERC20;
 
     using OrderTypes for OrderTypes.MakerOrder;
@@ -134,8 +136,9 @@ contract LooksRareExchange is ILooksRareExchange, ReentrancyGuard, Ownable {
         address _executionManager,
         address _royaltyFeeManager,
         address _WETH,
-        address _protocolFeeRecipient
-    ) {
+        address _protocolFeeRecipient,
+        address _trustedForwarder
+    ) ERC2771Context(_trustedForwarder) {
         // Calculate the domain separator
         DOMAIN_SEPARATOR = keccak256(
             abi.encode(
@@ -159,11 +162,12 @@ contract LooksRareExchange is ILooksRareExchange, ReentrancyGuard, Ownable {
      * @param minNonce minimum user nonce
      */
     function cancelAllOrdersForSender(uint256 minNonce) external {
-        require(minNonce > userMinOrderNonce[msg.sender], "Cancel: Order nonce lower than current");
-        require(minNonce < userMinOrderNonce[msg.sender] + 500000, "Cancel: Cannot cancel more orders");
-        userMinOrderNonce[msg.sender] = minNonce;
+        address msgSender = _msgSender();
+        require(minNonce > userMinOrderNonce[msgSender], "Cancel: Order nonce lower than current");
+        require(minNonce < userMinOrderNonce[msgSender] + 500000, "Cancel: Cannot cancel more orders");
+        userMinOrderNonce[msgSender] = minNonce;
 
-        emit CancelAllOrders(msg.sender, minNonce);
+        emit CancelAllOrders(msgSender, minNonce);
     }
 
     /**
@@ -171,14 +175,16 @@ contract LooksRareExchange is ILooksRareExchange, ReentrancyGuard, Ownable {
      * @param orderNonces array of order nonces
      */
     function cancelMultipleMakerOrders(uint256[] calldata orderNonces) external {
+        address msgSender = _msgSender();
+
         require(orderNonces.length > 0, "Cancel: Cannot be empty");
 
         for (uint256 i = 0; i < orderNonces.length; i++) {
-            require(orderNonces[i] >= userMinOrderNonce[msg.sender], "Cancel: Order nonce lower than current");
-            _isUserOrderNonceExecutedOrCancelled[msg.sender][orderNonces[i]] = type(uint256).max;
+            require(orderNonces[i] >= userMinOrderNonce[msgSender], "Cancel: Order nonce lower than current");
+            _isUserOrderNonceExecutedOrCancelled[msgSender][orderNonces[i]] = type(uint256).max;
         }
 
-        emit CancelMultipleOrders(msg.sender, orderNonces);
+        emit CancelMultipleOrders(msgSender, orderNonces);
     }
 
     /**
@@ -192,11 +198,11 @@ contract LooksRareExchange is ILooksRareExchange, ReentrancyGuard, Ownable {
     ) external payable override nonReentrant {
         require((makerAsk.isOrderAsk) && (!takerBid.isOrderAsk), "Order: Wrong sides");
         require(makerAsk.currency == WETH, "Order: Currency must be WETH");
-        require(msg.sender == takerBid.taker, "Order: Taker must be the sender");
+        require(_msgSender() == takerBid.taker, "Order: Taker must be the sender");
 
         // If not enough ETH to cover the price, use WETH
         if (takerBid.price > msg.value) {
-            IERC20(WETH).safeTransferFrom(msg.sender, address(this), (takerBid.price - msg.value));
+            IERC20(WETH).safeTransferFrom(takerBid.taker, address(this), (takerBid.price - msg.value));
         } else {
             require(takerBid.price == msg.value, "Order: Msg.value too high");
         }
@@ -262,7 +268,7 @@ contract LooksRareExchange is ILooksRareExchange, ReentrancyGuard, Ownable {
         nonReentrant
     {
         require((makerAsk.isOrderAsk) && (!takerBid.isOrderAsk), "Order: Wrong sides");
-        require(msg.sender == takerBid.taker, "Order: Taker must be the sender");
+        require(_msgSender() == takerBid.taker, "Order: Taker must be the sender");
 
         // Check the maker ask order
         bytes32 askHash = makerAsk.hash();
@@ -290,7 +296,7 @@ contract LooksRareExchange is ILooksRareExchange, ReentrancyGuard, Ownable {
             makerAsk.collection,
             tokenId,
             makerAsk.currency,
-            msg.sender,
+            takerBid.taker,
             makerAsk.signer,
             takerBid.price,
             makerAsk.minPercentageToAsk
@@ -324,7 +330,7 @@ contract LooksRareExchange is ILooksRareExchange, ReentrancyGuard, Ownable {
         nonReentrant
     {
         require((!makerBid.isOrderAsk) && (takerAsk.isOrderAsk), "Order: Wrong sides");
-        require(msg.sender == takerAsk.taker, "Order: Taker must be the sender");
+        require(_msgSender() == takerAsk.taker, "Order: Taker must be the sender");
 
         // Check the maker bid order
         bytes32 bidHash = makerBid.hash();
@@ -347,7 +353,7 @@ contract LooksRareExchange is ILooksRareExchange, ReentrancyGuard, Ownable {
         }
 
         // Execution part 1/2
-        _transferNonFungibleToken(makerBid.collection, msg.sender, makerBid.signer, tokenId, amount);
+        _transferNonFungibleToken(makerBid.collection, takerAsk.taker, makerBid.signer, tokenId, amount);
 
         // Execution part 2/2
         _transferFeesAndFunds(
@@ -620,5 +626,13 @@ contract LooksRareExchange is ILooksRareExchange, ReentrancyGuard, Ownable {
 
         // Verify whether strategy can be executed
         require(executionManager.isStrategyWhitelisted(makerOrder.strategy), "Strategy: Not whitelisted");
+    }
+
+    function _msgData() internal view virtual override(Context, ERC2771Context) returns (bytes calldata) {
+        return ERC2771Context._msgData();
+    }
+
+    function _msgSender() internal view virtual override(Context, ERC2771Context) returns (address sender) {
+        return ERC2771Context._msgSender();
     }
 }

@@ -28,7 +28,7 @@ library OrderTypes {
 
     struct TakerOrder {
         bool isOrderAsk; // true --> ask / false --> bid
-        address taker; // msg.sender
+        address taker; // _msgSender()
         uint256 price; // final price for the purchase
         uint256 tokenId;
         uint256 minPercentageToAsk; // // slippage protection (9000 --> 90% of the final price must return to ask)

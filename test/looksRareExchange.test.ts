@@ -7,10 +7,11 @@ import { increaseTo } from "./helpers/block-traveller";
 import { MakerOrderWithSignature, TakerOrder } from "./helpers/order-types";
 import { createMakerOrder, createTakerOrder } from "./helpers/order-helper";
 import { computeDomainSeparator, computeOrderHash, computeOrderDigest } from "./helpers/signature-helper";
+import { signForwardRequest, ForwardRequest } from "./helpers/eip2771";
 import { setUp } from "./test-setup";
 import { tokenSetUp } from "./token-set-up";
 
-const { defaultAbiCoder, parseEther } = utils;
+const { defaultAbiCoder, parseEther, arrayify } = utils;
 
 describe("LooksRare Exchange", () => {
   // Mock contracts
@@ -19,6 +20,7 @@ describe("LooksRare Exchange", () => {
   let mockERC721WithRoyalty: Contract;
   let mockERC1155: Contract;
   let weth: Contract;
+  let minimalForwarder: Contract;
 
   // Exchange contracts
   let transferSelectorNFT: Contract;
@@ -75,6 +77,7 @@ describe("LooksRare Exchange", () => {
       royaltyFeeManager,
       royaltyFeeSetter,
       ,
+      minimalForwarder,
     ] = await setUp(admin, feeRecipient, royaltyCollector, standardProtocolFee, royaltyFeeLimit);
 
     await tokenSetUp(
@@ -726,6 +729,226 @@ describe("LooksRare Exchange", () => {
       await expect(
         looksRareExchange.connect(takerAskUser).matchBidWithTakerAsk(takerAskOrder, makerBidOrder)
       ).to.be.revertedWith("Signature: Invalid");
+    });
+
+    it("EIP2771/ERC721/ETH only - MakerAsk order is matched by TakerBid order", async () => {
+      const forwardExecutor = accounts[0];
+      const makerAskUser = accounts[1];
+      const takerBidUser = accounts[2];
+
+      const makerAskOrder: MakerOrderWithSignature = await createMakerOrder({
+        isOrderAsk: true,
+        signer: makerAskUser.address,
+        collection: mockERC721.address,
+        price: parseEther("3"),
+        tokenId: constants.Zero,
+        amount: constants.One,
+        strategy: strategyStandardSaleForFixedPrice.address,
+        currency: weth.address,
+        nonce: constants.Zero,
+        startTime: startTimeOrder,
+        endTime: endTimeOrder,
+        minPercentageToAsk: constants.Zero,
+        params: defaultAbiCoder.encode([], []),
+        signerUser: makerAskUser,
+        verifyingContract: looksRareExchange.address,
+      });
+
+      const takerBidOrder = createTakerOrder({
+        isOrderAsk: false,
+        taker: takerBidUser.address,
+        price: parseEther("3"),
+        tokenId: constants.Zero,
+        minPercentageToAsk: constants.Zero,
+        params: defaultAbiCoder.encode([], []),
+      });
+
+      // a way to encode tx data
+      const intTxData = (
+        await looksRareExchange.populateTransaction.matchAskWithTakerBidUsingETHAndWETH(takerBidOrder, makerAskOrder, {
+          value: takerBidOrder.price,
+        })
+      ).data;
+      const forwardRequest: ForwardRequest = {
+        from: takerBidUser.address,
+        to: looksRareExchange.address,
+        value: takerBidOrder.price,
+        gas: BigNumber.from(300000),
+        nonce: constants.Zero,
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        data: arrayify(intTxData!),
+      };
+      const forwardRequestSig = await signForwardRequest(takerBidUser, minimalForwarder.address, forwardRequest);
+
+      const tx = await minimalForwarder.connect(forwardExecutor).checkExecute(forwardRequest, forwardRequestSig, {
+        value: takerBidOrder.price,
+      });
+
+      await expect(tx)
+        .to.emit(looksRareExchange, "TakerBid")
+        .withArgs(
+          computeOrderHash(makerAskOrder),
+          makerAskOrder.nonce,
+          takerBidUser.address,
+          makerAskUser.address,
+          strategyStandardSaleForFixedPrice.address,
+          makerAskOrder.currency,
+          makerAskOrder.collection,
+          makerAskOrder.tokenId,
+          makerAskOrder.amount,
+          takerBidOrder.price
+        );
+
+      assert.equal(await mockERC721.ownerOf("0"), takerBidUser.address);
+
+      assert.isTrue(
+        await looksRareExchange.isUserOrderNonceExecutedOrCancelled(makerAskUser.address, makerAskOrder.nonce)
+      );
+
+      // Orders that have been executed cannot be matched again
+      await expect(
+        looksRareExchange.connect(takerBidUser).matchAskWithTakerBidUsingETHAndWETH(takerBidOrder, makerAskOrder, {
+          value: takerBidOrder.price,
+        })
+      ).to.be.revertedWith("Order: Matching order expired");
+    });
+
+    it("EIP2771/ERC721/WETH only - MakerBid order is matched by TakerAsk order", async () => {
+      const forwardExecutor = accounts[0];
+      const makerBidUser = accounts[2];
+      const takerAskUser = accounts[1];
+
+      const makerBidOrder = await createMakerOrder({
+        isOrderAsk: false,
+        signer: makerBidUser.address,
+        collection: mockERC721.address,
+        tokenId: constants.Zero,
+        price: parseEther("3"),
+        amount: constants.One,
+        strategy: strategyStandardSaleForFixedPrice.address,
+        currency: weth.address,
+        nonce: constants.Zero,
+        startTime: startTimeOrder,
+        endTime: endTimeOrder,
+        minPercentageToAsk: constants.Zero,
+        params: defaultAbiCoder.encode([], []),
+        signerUser: makerBidUser,
+        verifyingContract: looksRareExchange.address,
+      });
+
+      const takerAskOrder = createTakerOrder({
+        isOrderAsk: true,
+        taker: takerAskUser.address,
+        tokenId: constants.Zero,
+        price: makerBidOrder.price,
+        minPercentageToAsk: constants.Zero,
+        params: defaultAbiCoder.encode([], []),
+      });
+
+      // a way to encode tx data
+      const intTxData = (await looksRareExchange.populateTransaction.matchBidWithTakerAsk(takerAskOrder, makerBidOrder))
+        .data;
+      const forwardRequest: ForwardRequest = {
+        from: takerAskUser.address,
+        to: looksRareExchange.address,
+        value: constants.Zero,
+        gas: BigNumber.from(300000),
+        nonce: constants.Zero,
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        data: arrayify(intTxData!),
+      };
+      const forwardRequestSig = await signForwardRequest(takerAskUser, minimalForwarder.address, forwardRequest);
+
+      const tx = await minimalForwarder.connect(forwardExecutor).checkExecute(forwardRequest, forwardRequestSig);
+
+      await expect(tx)
+        .to.emit(looksRareExchange, "TakerAsk")
+        .withArgs(
+          computeOrderHash(makerBidOrder),
+          makerBidOrder.nonce,
+          takerAskUser.address,
+          makerBidUser.address,
+          strategyStandardSaleForFixedPrice.address,
+          makerBidOrder.currency,
+          makerBidOrder.collection,
+          takerAskOrder.tokenId,
+          makerBidOrder.amount,
+          makerBidOrder.price
+        );
+
+      assert.equal(await mockERC721.ownerOf("0"), makerBidUser.address);
+      assert.isTrue(
+        await looksRareExchange.isUserOrderNonceExecutedOrCancelled(makerBidUser.address, makerBidOrder.nonce)
+      );
+    });
+
+    it("EIP2771/ERC721/WETH only - TakerBid order is matched by MakerAsk order", async () => {
+      const forwardExecutor = accounts[0];
+      const makerAskUser = accounts[1];
+      const takerBidUser = accounts[2];
+
+      const makerAskOrder = await createMakerOrder({
+        isOrderAsk: true,
+        signer: makerAskUser.address,
+        collection: mockERC721WithRoyalty.address,
+        price: parseEther("3"),
+        tokenId: constants.Zero,
+        amount: constants.One,
+        strategy: strategyStandardSaleForFixedPrice.address,
+        currency: weth.address,
+        nonce: constants.Zero,
+        startTime: startTimeOrder,
+        endTime: endTimeOrder,
+        minPercentageToAsk: constants.Zero,
+        params: defaultAbiCoder.encode([], []),
+        signerUser: makerAskUser,
+        verifyingContract: looksRareExchange.address,
+      });
+
+      const takerBidOrder: TakerOrder = {
+        isOrderAsk: false,
+        taker: takerBidUser.address,
+        price: makerAskOrder.price,
+        tokenId: makerAskOrder.tokenId,
+        minPercentageToAsk: constants.Zero,
+        params: defaultAbiCoder.encode([], []),
+      };
+
+      // a way to encode tx data
+      const intTxData = (await looksRareExchange.populateTransaction.matchAskWithTakerBid(takerBidOrder, makerAskOrder))
+        .data;
+      const forwardRequest: ForwardRequest = {
+        from: takerBidUser.address,
+        to: looksRareExchange.address,
+        value: constants.Zero,
+        gas: BigNumber.from(300000),
+        nonce: constants.Zero,
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        data: arrayify(intTxData!),
+      };
+      const forwardRequestSig = await signForwardRequest(takerBidUser, minimalForwarder.address, forwardRequest);
+
+      const tx = await minimalForwarder.connect(forwardExecutor).checkExecute(forwardRequest, forwardRequestSig);
+
+      await expect(tx)
+        .to.emit(looksRareExchange, "TakerBid")
+        .withArgs(
+          computeOrderHash(makerAskOrder),
+          makerAskOrder.nonce,
+          takerBidUser.address,
+          makerAskUser.address,
+          strategyStandardSaleForFixedPrice.address,
+          makerAskOrder.currency,
+          makerAskOrder.collection,
+          takerBidOrder.tokenId,
+          makerAskOrder.amount,
+          makerAskOrder.price
+        );
+
+      assert.equal(await mockERC721WithRoyalty.ownerOf("0"), takerBidUser.address);
+      assert.isTrue(
+        await looksRareExchange.isUserOrderNonceExecutedOrCancelled(makerAskUser.address, makerAskOrder.nonce)
+      );
     });
   });
 
@@ -1515,6 +1738,64 @@ describe("LooksRare Exchange", () => {
       ).to.be.revertedWith("Order: Matching order expired");
     });
 
+    it("EIP2771/Cancel Multiple orders", async () => {
+      const forwardExecutor = accounts[0];
+      const makerAskUser = accounts[1];
+      const takerBidUser = accounts[2];
+
+      const makerAskOrder = await createMakerOrder({
+        isOrderAsk: true,
+        signer: makerAskUser.address,
+        collection: mockERC721.address,
+        tokenId: constants.Zero,
+        price: parseEther("3"),
+        amount: constants.One,
+        strategy: strategyStandardSaleForFixedPrice.address,
+        currency: weth.address,
+        nonce: constants.Zero,
+        startTime: startTimeOrder,
+        endTime: endTimeOrder,
+        minPercentageToAsk: constants.Zero,
+        params: defaultAbiCoder.encode([], []),
+        signerUser: makerAskUser,
+        verifyingContract: looksRareExchange.address,
+      });
+
+      const takerBidOrder = createTakerOrder({
+        isOrderAsk: false,
+        taker: takerBidUser.address,
+        tokenId: makerAskOrder.tokenId,
+        price: makerAskOrder.price,
+        minPercentageToAsk: constants.Zero,
+        params: defaultAbiCoder.encode([], []),
+      });
+
+      // a way to encode tx data
+      const intTxData = (await looksRareExchange.populateTransaction.cancelMultipleMakerOrders([makerAskOrder.nonce]))
+        .data;
+      const forwardRequest: ForwardRequest = {
+        from: makerAskUser.address,
+        to: looksRareExchange.address,
+        value: constants.Zero,
+        gas: BigNumber.from(300000),
+        nonce: constants.Zero,
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        data: arrayify(intTxData!),
+      };
+      const forwardRequestSig = await signForwardRequest(makerAskUser, minimalForwarder.address, forwardRequest);
+
+      const tx = await minimalForwarder.connect(forwardExecutor).checkExecute(forwardRequest, forwardRequestSig);
+
+      // Event params are not tested because of array issue with BN
+      await expect(tx).to.emit(looksRareExchange, "CancelMultipleOrders");
+
+      await expect(
+        looksRareExchange.connect(takerBidUser).matchAskWithTakerBidUsingETHAndWETH(takerBidOrder, makerAskOrder, {
+          value: takerBidOrder.price,
+        })
+      ).to.be.revertedWith("Order: Matching order expired");
+    });
+
     it("Cancel - Cannot match if on a different checkpoint than current on-chain signer's checkpoint", async () => {
       const makerAskUser = accounts[1];
       const takerBidUser = accounts[3];
@@ -1547,6 +1828,62 @@ describe("LooksRare Exchange", () => {
       });
 
       const tx = await looksRareExchange.connect(makerAskUser).cancelAllOrdersForSender("1");
+      await expect(tx).to.emit(looksRareExchange, "CancelAllOrders").withArgs(makerAskUser.address, "1");
+
+      await expect(
+        looksRareExchange.connect(takerBidUser).matchAskWithTakerBidUsingETHAndWETH(takerBidOrder, makerAskOrder, {
+          value: takerBidOrder.price,
+        })
+      ).to.be.revertedWith("Order: Matching order expired");
+    });
+
+    it("EIP2771/Cancel All orders", async () => {
+      const forwardExecutor = accounts[0];
+      const makerAskUser = accounts[1];
+      const takerBidUser = accounts[3];
+
+      const makerAskOrder = await createMakerOrder({
+        isOrderAsk: true,
+        signer: makerAskUser.address,
+        collection: mockERC721.address,
+        price: parseEther("3"),
+        tokenId: constants.Zero,
+        amount: constants.One,
+        strategy: strategyStandardSaleForFixedPrice.address,
+        currency: weth.address,
+        nonce: constants.Zero,
+        startTime: startTimeOrder,
+        endTime: endTimeOrder,
+        minPercentageToAsk: constants.Zero,
+        params: defaultAbiCoder.encode([], []),
+        signerUser: makerAskUser,
+        verifyingContract: looksRareExchange.address,
+      });
+
+      const takerBidOrder = createTakerOrder({
+        isOrderAsk: false,
+        taker: takerBidUser.address,
+        tokenId: makerAskOrder.tokenId,
+        price: makerAskOrder.price,
+        minPercentageToAsk: constants.Zero,
+        params: defaultAbiCoder.encode([], []),
+      });
+
+      // a way to encode tx data
+      const intTxData = (await looksRareExchange.populateTransaction.cancelAllOrdersForSender("1")).data;
+      const forwardRequest: ForwardRequest = {
+        from: makerAskUser.address,
+        to: looksRareExchange.address,
+        value: constants.Zero,
+        gas: BigNumber.from(300000),
+        nonce: constants.Zero,
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        data: arrayify(intTxData!),
+      };
+      const forwardRequestSig = await signForwardRequest(makerAskUser, minimalForwarder.address, forwardRequest);
+
+      const tx = await minimalForwarder.connect(forwardExecutor).checkExecute(forwardRequest, forwardRequestSig);
+
       await expect(tx).to.emit(looksRareExchange, "CancelAllOrders").withArgs(makerAskUser.address, "1");
 
       await expect(
